@@ -15,6 +15,7 @@ export const Budget = z.object({
     })
     .prefault({}),
   backfill_days: z.number().int().default(90),
+  ideas_per_batch: z.number().int().default(10),
   social: z
     .object({
       linkedin_posts_per_term: z.number().int().default(15),

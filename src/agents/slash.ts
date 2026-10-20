@@ -63,7 +63,7 @@ export async function runSlash(text: string): Promise<{ reply: string; public?: 
     case "terms": return { reply: termsReport() };
     case "source": case "follow": return { reply: arg ? await addSource(arg.replace(/^<|>$/g, "").split("|")[0]) : "Usage: `/ca source <url>`" };
     case "ideate": {
-      const r = await ideate({ n: 5 });
+      const r = await ideate({});
       return { reply: `Posted ${r.files.length} new idea cards.` };
     }
     case "health": return { reply: formatHealth(await health(), true) };

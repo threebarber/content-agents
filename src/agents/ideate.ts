@@ -7,6 +7,7 @@ import { IdeateOutput, type CardDraft, type CardMeta } from "../../schemas/card.
 import { loadHooks } from "./distill.js";
 import { cardBody, cardId, listCards, writeCard, repoUrl, type Card } from "./cards.js";
 import { withDb } from "../lib/duckdb.js";
+import { loadBudget } from "../registry/store.js";
 import { postCards } from "./slack-cards.js";
 import type { HookRecord } from "../../schemas/hook.js";
 import { readJsonl } from "../lib/jsonl.js";
@@ -130,7 +131,7 @@ const callModel = traceable(
   async (input: { system: string; user: string; n: number }) => {
     const res = await claude().messages.parse({
       model: MODELS.ideate,
-      max_tokens: 16000,
+      max_tokens: 20000, // 10 cards + thinking; stays under the SDK's non-streaming limit
       system: input.system,
       output_config: { effort: "high", format: zodOutputFormat(IdeateOutput) },
       messages: [{ role: "user", content: input.user + `\n\n=====\n\nWrite ${input.n} cards.` }],
@@ -249,7 +250,7 @@ async function generateChecked(user: string, n: number, hooks: HookRecord[]): Pr
 export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean } = {}): Promise<IdeateResult> {
   const hooks = swipeFile(21, 45);
   const notes = await workNotes(30, 20);
-  const n = opts.n ?? 7;
+  const n = opts.n ?? loadBudget().ideas_per_batch;
   const { cards, usd, run_id, repaired } = await generateChecked(render(hooks, notes, ""), n, hooks);
   if (repaired) console.error(`ideate: repaired ${repaired} card(s) that failed review`);
   if (opts.dry) {

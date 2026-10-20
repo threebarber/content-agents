@@ -11,7 +11,7 @@ export const ideateTask = schedules.task({
   run: async () => {
     if (!stateToken()) return { skipped: "missing STATE_GITHUB_TOKEN" };
     const dir = checkoutState();
-    const r = await ideate({ n: 7 });
+    const r = await ideate({});
     logger.info("ideate", { cards: r.files.length, usd: r.usd, run: r.runId });
     await logRun("ideate", { cards: r.files.length, usd: r.usd, run: r.runId }, r.files.length ? [] : ["ideate produced no cards"]);
     const committed = commitState(dir, `ideate: ${r.files.length} cards ($${r.usd.toFixed(3)})`);

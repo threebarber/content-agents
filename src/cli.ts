@@ -354,11 +354,11 @@ program
 program
   .command("ideate")
   .description("write idea cards to queue/inbox and post them to Slack")
-  .option("-n <n>", "", "7")
+  .option("-n <n>", "cards (default: budget ideas_per_batch)")
   .option("--dry", "print cards, write nothing")
   .option("--no-post", "don't post to Slack")
   .action(async (o) => {
-    const r = await ideate({ n: Number(o.n), dry: o.dry, post: o.post });
+    const r = await ideate({ n: o.n ? Number(o.n) : undefined, dry: o.dry, post: o.post });
     console.log(`${r.files.length} cards, $${r.usd.toFixed(4)}, langsmith run ${r.runId ?? "-"}`);
     for (const f of r.files) console.log("  " + f);
   });
