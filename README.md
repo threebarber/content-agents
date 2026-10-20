@@ -5,8 +5,8 @@ creators you follow, idea cards seeded from your own work notes, and an ant-colo
 that discovers new sources on its own. Runs on free tiers (Trigger.dev, LangSmith, Substack's public
 API, Apify's monthly credit) for roughly $5–10/month in model calls.
 
-**Status: Phase 0.** Registry, Substack ingestion, brain reader, and the daily Trigger.dev task exist.
-Distillation, ideation, drafting and the retro loop are next. See [PLAN.md](PLAN.md).
+**Status: Phase 1.** Registry, ingestion, swipe-file distillation, twice-weekly idea cards in Slack, and the verdict loop run on Trigger.dev.
+LinkedIn ingestion, drafting, and the weekly retro are next. See [PLAN.md](PLAN.md).
 
 ## How it works (short)
 
@@ -41,7 +41,7 @@ npm run dev                      # trigger.dev dev server; run `ingest-distill` 
 ## CLI
 
 `ca sources ls|add|set|resolve|verify|decay|plan` · `ca terms ls|add` · `ca ingest substack|brain` ·
-`ca top` · `ca sql "<query>"` · `ca stats`
+`ca distill` · `ca hooks` · `ca ideate` · `ca feedback` · `ca top` · `ca sql "<query>"` · `ca stats`
 
 ## Design references
 
