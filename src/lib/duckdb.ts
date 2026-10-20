@@ -19,11 +19,12 @@ export async function withDb<T>(fn: (q: (sql: string) => Promise<Record<string, 
 }
 
 /** Per-author engagement z-score: how far a post sits from that author's own mean (likes+comments). */
-export const TOP_BY_Z = (n = 20, type = "substack") => `
+export const TOP_BY_Z = (n = 20, type = "substack", sourceIds?: string[]) => `
 WITH base AS (
   SELECT id, source_id, author, title, url, published_at,
          coalesce(metrics.likes,0) + 2*coalesce(metrics.comments,0) AS eng
   FROM items WHERE type = '${type}' AND NOT paywalled
+  ${sourceIds ? `AND source_id IN (${sourceIds.map((i) => `'${i.replace(/'/g, "''")}'`).join(",") || "''"})` : ""}
 ), stats AS (
   SELECT source_id, avg(eng) AS mu, stddev_samp(eng) AS sd, count(*) AS n FROM base GROUP BY source_id
 )

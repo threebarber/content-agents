@@ -266,9 +266,11 @@ program
   .description("top items by per-author engagement z-score (DuckDB over data/items)")
   .option("-n <n>", "", "20")
   .option("--type <t>", "", "substack")
+  .option("--all-sources", "include paused/retired sources")
   .action(async (o) => {
+    const ids = o.allSources ? undefined : loadSources().sources.filter((s) => s.status === "active" || s.status === "trial").map((s) => s.id);
     await withDb(async (q) => {
-      const rows = await q(TOP_BY_Z(Number(o.n), o.type));
+      const rows = await q(TOP_BY_Z(Number(o.n), o.type, ids));
       for (const r of rows) console.log(`${String(r.z).padStart(5)}  ${String(r.eng).padStart(5)}  ${String(r.published).padEnd(10)}  ${String(r.author).slice(0, 22).padEnd(22)}  ${String(r.title).slice(0, 70)}`);
     });
   });
