@@ -8,6 +8,7 @@ import { writeItems } from "../lib/jsonl.js";
 import { loadBrainConfig, pullBrain } from "../ingest/brain.js";
 import { appendJsonl, existingItemIds } from "../lib/jsonl.js";
 import { statePath } from "../lib/paths.js";
+import { distill } from "../agents/distill.js";
 
 /**
  * Daily: Thompson-sample Substack sources, pull new items, read the brain, commit to the state repo.
@@ -72,7 +73,17 @@ export const ingestDistill = schedules.task({
       }
     }
 
-    const committed = commitState(dir, `ingest: ${written} substack, ${brainNew} brain, ${decayed} decayed (${new Date(payload.timestamp).toISOString().slice(0, 10)})`);
-    return { written, brainNew, decayed, sources: plan.length, errors, committed };
+    // distill new items into the swipe file (Haiku); pheromone updates happen inside
+    let distilled = { distilled: 0, hits: 0, failed: 0, usd: 0 };
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        distilled = await distill({ limit: 300, concurrency: 6, log: (m) => logger.info(m) });
+      } catch (e) {
+        errors.push(`distill: ${(e as Error).message}`);
+      }
+    }
+
+    const committed = commitState(dir, `ingest: ${written} substack, ${brainNew} brain, ${distilled.distilled} distilled ($${distilled.usd.toFixed(3)}), ${decayed} decayed (${new Date(payload.timestamp).toISOString().slice(0, 10)})`);
+    return { written, brainNew, decayed, distilled, sources: plan.length, errors, committed };
   },
 });

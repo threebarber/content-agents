@@ -12,6 +12,9 @@ import { loadBrainConfig, pullBrain } from "./ingest/brain.js";
 import { statePath } from "./lib/paths.js";
 import { withDb, TOP_BY_Z } from "./lib/duckdb.js";
 import { postMessage, sections } from "./lib/slack.js";
+import { distill, loadHooks } from "./agents/distill.js";
+import { ideate } from "./agents/ideate.js";
+import { sweepFeedback } from "./agents/feedback.js";
 import { Source } from "../schemas/source.js";
 import { Term } from "../schemas/term.js";
 
@@ -289,6 +292,45 @@ program
   .action(async (text, o) => {
     const r = await postMessage(o.channel, text, sections(text));
     console.log(`posted to ${r.channel} at ${r.ts}`);
+  });
+
+program
+  .command("distill")
+  .description("swipe-file extraction (Haiku) for items without a hook record")
+  .option("--limit <n>", "", "500")
+  .option("--concurrency <n>", "", "6")
+  .action(async (o) => {
+    const r = await distill({ limit: Number(o.limit), concurrency: Number(o.concurrency), log: console.error });
+    console.log(`distilled ${r.distilled} (${r.hits} hits, ${r.failed} failed) for $${r.usd.toFixed(4)}`);
+  });
+
+program
+  .command("hooks")
+  .description("show swipe-file records, best first")
+  .option("-n <n>", "", "15")
+  .action((o) => {
+    const hs = loadHooks().sort((a, b) => (b.engagement_z ?? 0) + b.hook_quality - ((a.engagement_z ?? 0) + a.hook_quality)).slice(0, Number(o.n));
+    for (const h of hs) console.log(`\n${h.hit ? "★" : " "} q${h.hook_quality} r${h.relevance} z${h.engagement_z ?? "?"}  ${h.author} — ${h.title}\n   hook: ${h.hook.slice(0, 160)}\n   tmpl: ${h.hook_template.slice(0, 160)}\n   why:  ${h.why_it_worked.slice(0, 160)}`);
+  });
+
+program
+  .command("ideate")
+  .description("write idea cards to queue/inbox and post them to Slack")
+  .option("-n <n>", "", "7")
+  .option("--dry", "print cards, write nothing")
+  .option("--no-post", "don't post to Slack")
+  .action(async (o) => {
+    const r = await ideate({ n: Number(o.n), dry: o.dry, post: o.post });
+    console.log(`${r.files.length} cards, $${r.usd.toFixed(4)}, langsmith run ${r.runId ?? "-"}`);
+    for (const f of r.files) console.log("  " + f);
+  });
+
+program
+  .command("feedback")
+  .description("process verdicts on inbox cards")
+  .action(async () => {
+    const r = await sweepFeedback(console.error);
+    console.log(JSON.stringify(r));
   });
 
 program.parseAsync().catch((e) => fail(e.message));

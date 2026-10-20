@@ -1,5 +1,5 @@
 import { defineConfig } from "@trigger.dev/sdk";
-import { syncEnvVars } from "@trigger.dev/build/extensions/core";
+import { syncEnvVars, additionalFiles } from "@trigger.dev/build/extensions/core";
 import fs from "node:fs";
 import { parseEnv } from "node:util";
 
@@ -14,11 +14,14 @@ export default defineConfig({
     default: { maxAttempts: 2, minTimeoutInMs: 2000, maxTimeoutInMs: 20000, factor: 2, randomize: true },
   },
   build: {
+    // DuckDB ships a native binding: install it in the image instead of bundling it.
+    external: ["@duckdb/node-api", "@duckdb/node-bindings"],
     extensions: [
+      additionalFiles({ files: ["./prompts/**"] }),
       // On deploy, copy the app's env vars from the local .env into the target environment.
       // TRIGGER_* and STATE_DIR are deliberately excluded. Add GITHUB_TOKEN etc. to .env and redeploy.
       syncEnvVars(async () => {
-        const keys = ["STATE_REPO", "BRAIN_REPO", "STATE_GITHUB_TOKEN", "BRAIN_GITHUB_TOKEN", "ANTHROPIC_API_KEY", "APIFY_TOKEN", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_TRACING", "SLACK_BOT_TOKEN", "SLACK_CHANNEL", "SLACK_SIGNING_SECRET", "GITHUB_WEBHOOK_SECRET"];
+        const keys = ["ANTHROPIC_WORKSPACE_ID", "STATE_REPO", "BRAIN_REPO", "STATE_GITHUB_TOKEN", "BRAIN_GITHUB_TOKEN", "ANTHROPIC_API_KEY", "APIFY_TOKEN", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_TRACING", "SLACK_BOT_TOKEN", "SLACK_CHANNEL", "SLACK_SIGNING_SECRET", "GITHUB_WEBHOOK_SECRET"];
         // Read .env directly: the CLI's own env loading doesn't reliably expose every key to this hook.
         const fromFile = fs.existsSync(".env") ? (parseEnv(fs.readFileSync(".env", "utf8")) as Record<string, string>) : {};
         const val = (k: string) => (fromFile[k] ?? process.env[k] ?? "").trim();
