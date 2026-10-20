@@ -45,10 +45,11 @@ export async function draftCard(card: Card): Promise<DraftResult> {
   const own = await recentOwnPosts(5);
   const user = [
     `APPROVED CARD\n${card.body.split("\n---\n")[0]}${card.meta.why ? `\n\nThe owner's note when approving: "${card.meta.why}"` : ""}`,
-    `HIS WORK NOTES (redacted source material)\n${[...notes.values()].map((n) => `[${n.title}]\n${n.text.slice(0, 3000)}`).join("\n\n") || "(none — work from the card)"}`,
+    `THEIR WORK NOTES (redacted source material)\n${[...notes.values()].map((n) => `[${n.title}]\n${n.text.slice(0, 3000)}`).join("\n\n") || "(none — work from the card)"}`,
     `INSPIRATION (posts this riffs on)\n${evidence.map((h) => `${h!.author} — "${h!.title}"\n  hook: ${h!.hook}\n  claim: ${h!.core_claim}`).join("\n") || "(none)"}`,
-    `HIS VOICE\n${readMemory("voice") || ""}\n${own || "(no past posts available yet: write plainly and specifically)"}`,
-    `WHAT HE TENDS TO APPROVE\n${readMemory("winning-patterns") || "(not enough feedback yet)"}`,
+    `THEIR VOICE\n${readMemory("voice") || ""}\n${own || "(no past posts available yet: write plainly and specifically)"}`,
+    `FACTS ABOUT THEIR WORK (never contradict)\n${readMemory("facts") || "(none)"}`,
+    `WHAT THEY TEND TO APPROVE\n${readMemory("winning-patterns") || "(not enough feedback yet)"}`,
   ].join("\n\n=====\n\n");
   const r = await callDraft({ system: prompt(linkedin ? "draft_linkedin" : "draft_hashnode"), user, maxTokens: linkedin ? 4000 : 12000 });
   const words = r.draft.split(/\s+/).filter(Boolean).length;

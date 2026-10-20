@@ -114,6 +114,7 @@ function render(hooks: HookRecord[], notes: BrainRow[], extra: string): string {
     .join("\n\n");
   const wn = notes.map((n) => `[${n.id}] (${n.kind}, ${n.published_at.slice(0, 10)}) ${n.title}\n${n.text.slice(0, 1200)}`).join("\n\n---\n\n");
   return [
+    `FACTS ABOUT THEIR WORK (corrections from them; never contradict)\n${readMemory("facts") || "(none)"}`,
     `LEARNED PREFERENCES\n${readMemory("winning-patterns") || "(none yet — first runs)"}\n\nREJECTED PATTERNS\n${readMemory("rejected") || "(none yet)"}`,
     `ALREADY COVERED OR REJECTED\n${covered()}`,
     `TOPICS FROM THE LAST TWO BATCHES (pick different topics, different posts, different projects)\n${recentTopics(8) || "(none)"}`,
