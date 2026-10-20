@@ -34,6 +34,31 @@ const FORMAT: Record<string, string> = {
   essay: "Essay: argue one idea",
 };
 const fmtKey = (f: string) => f.toLowerCase().replace(/[^a-z]/g, "");
+const RIFF: Record<string, string> = {
+  extend: "You extend their point with your own evidence",
+  disagree: "You push back, from your experience",
+  apply: "You try their idea in your world",
+  teardown: "You dissect their example",
+  reactodata: "You react to their numbers",
+  screenshotcommentary: "You quote them and add your take",
+  original: "From your work notes",
+};
+
+/** "Riffing on" block: the one post this card responds to, what it said, and how you respond. */
+function riffBlock(card: Card): Block | null {
+  const m = card.meta;
+  if (!m.riff_on) return m.riff_type && fmtKey(m.riff_type) === "original" ? { type: "context", elements: [{ type: "mrkdwn", text: "_Original idea from your work notes_" }] } : null;
+  const it = itemsById([m.riff_on]).get(m.riff_on);
+  const h = loadHooks().find((x) => x.item_id === m.riff_on);
+  const title = (it?.title ?? h?.title ?? "their post").replace(/[<>|]/g, "").slice(0, 90);
+  const url = it?.url ?? h?.url;
+  const stats = it ? `  ❤️ ${it.metrics.likes ?? "?"}  💬 ${it.metrics.comments ?? "?"}` : "";
+  const how = RIFF[fmtKey(m.riff_type ?? "")] ?? m.riff_type ?? "";
+  return {
+    type: "section",
+    text: { type: "mrkdwn", text: `*Riffing on* ${it?.author ?? h?.author ?? ""}: ${url ? `<${url}|${title}>` : title}${stats}\n_Their point:_ ${m.their_point ?? h?.core_claim ?? ""}\n_Your move:_ ${how}`.slice(0, 2900) },
+  };
+}
 
 function vsUsual(z: number | null): string {
   if (z == null) return "";
@@ -47,7 +72,7 @@ function vsUsual(z: number | null): string {
 function sourceLines(card: Card): string[] {
   const hooks = new Map(loadHooks().map((h) => [h.item_id, h]));
   const items = itemsById(card.meta.evidence);
-  return card.meta.evidence.slice(0, 4).flatMap((id) => {
+  return card.meta.evidence.filter((id) => id !== card.meta.riff_on).slice(0, 3).flatMap((id) => {
     const h = hooks.get(id);
     const it = items.get(id);
     if (!h && !it) return [];
@@ -86,12 +111,14 @@ export function cardBlocks(card: Card): Block[] {
     { type: "divider" },
     { type: "header", text: { type: "plain_text", text: title.slice(0, 150), emoji: true } },
     { type: "context", elements: [{ type: "mrkdwn", text: `*${PLATFORM[m.platform] ?? m.platform}*   ·   ${fmt}   ·   predicted ${m.predicted_score}/10` }] },
-    { type: "section", text: { type: "mrkdwn", text: `*Opening line*\n>${hook.replace(/\n/g, "\n>").slice(0, 2800)}` } },
   ];
+  const riff = riffBlock(card);
+  if (riff) blocks.push(riff);
+  blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Opening line*\n>${hook.replace(/\n/g, "\n>").slice(0, 2800)}` } });
   if (m.hook_breakdown || template)
     blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Why this hook works*\n${m.hook_breakdown ?? ""}${template ? `${m.hook_breakdown ? "\n" : ""}_Pattern:_ ${template}` : ""}`.slice(0, 2900) } });
   if (angle) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Your angle*\n${angle}`.slice(0, 2900) } });
-  if (sources.length) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Inspired by*\n${sources.join("\n")}`.slice(0, 2900) } });
+  if (sources.length) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Also drawing on*\n${sources.join("\n")}`.slice(0, 2900) } });
   if (notes) blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `From your work notes: ${notes}` }] });
   blocks.push({
     type: "actions",

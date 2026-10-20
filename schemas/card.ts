@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 export const CardDraft = z.object({
+  riff_on: z.string().nullable().describe("id of the ONE swipe-file post this card responds to (from SWIPE FILE), or null only for a pure work-note card."),
+  their_point: z.string().nullable().describe("What that post actually argued or showed, in one specific sentence (their numbers, their example). Null if riff_on is null."),
+  riff_type: z.string().describe("How the owner responds: extend (adds his evidence), disagree (pushes back with his experience), apply (tries their idea in his world), teardown (dissects their example), react-to-data (responds to their numbers), screenshot-commentary, or original (work notes only)."),
   title: z.string().describe("Working title, under 80 chars."),
   platform: z.enum(["linkedin", "hashnode"]),
   hook: z.string().describe("The opening line(s) the owner would post, in his voice: plain, specific, lowercase-friendly, no hype."),
@@ -39,4 +42,7 @@ export type CardMeta = {
   published_url: string;
   slack?: { channel: string; ts: string };
   hook_breakdown?: string;
+  riff_on?: string | null;
+  riff_type?: string;
+  their_point?: string | null;
 };

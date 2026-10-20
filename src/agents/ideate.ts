@@ -8,6 +8,7 @@ import { withDb } from "../lib/duckdb.js";
 import { postCards } from "./slack-cards.js";
 import type { HookRecord } from "../../schemas/hook.js";
 import { readJsonl } from "../lib/jsonl.js";
+import { itemsById } from "../lib/items.js";
 import { statePath } from "../lib/paths.js";
 
 type MyPost = { id: string; url: string; published_at: string; at: string; likes: number | null; comments: number | null; shares: number | null; first_line: string | null };
@@ -51,8 +52,14 @@ function covered(): string {
 }
 
 function render(hooks: HookRecord[], notes: BrainRow[], extra: string): string {
+  const items = itemsById(hooks.map((h) => h.item_id));
   const sw = hooks
-    .map((h) => `[${h.item_id}] ${h.author} — "${h.title}" (z=${h.engagement_z ?? "?"}, q=${h.hook_quality}, ${h.format})\n  hook: ${h.hook}\n  template: ${h.hook_template}\n  claim: ${h.core_claim}\n  why: ${h.why_it_worked}`)
+    .map((h, i) => {
+      const it = items.get(h.item_id);
+      const eng = it ? `❤️${it.metrics.likes ?? "?"} 💬${it.metrics.comments ?? "?"}` : "";
+      const excerpt = i < 18 && it ? `\n  excerpt: ${it.text.replace(/\s+/g, " ").slice(0, 900)}` : "";
+      return `[${h.item_id}] ${h.author} — "${h.title}" (${it?.type ?? "?"}, ${eng}, z=${h.engagement_z ?? "?"}, ${h.format})\n  hook: ${h.hook}\n  claim: ${h.core_claim}\n  why it worked: ${h.why_it_worked}${excerpt}`;
+    })
     .join("\n\n");
   const wn = notes.map((n) => `[${n.id}] (${n.kind}, ${n.published_at.slice(0, 10)}) ${n.title}\n${n.text.slice(0, 1200)}`).join("\n\n---\n\n");
   return [
@@ -81,7 +88,7 @@ const callModel = traceable(
 );
 
 function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: string | null): CardMeta {
-  const evidence = d.evidence.map((e) => e.item_id);
+  const evidence = [...new Set([...(d.riff_on ? [d.riff_on] : []), ...d.evidence.map((e) => e.item_id)])];
   const sources = [...new Set(evidence.map((id) => hooks.find((h) => h.item_id === id)?.source_id).filter((s): s is string => !!s))];
   return {
     id: cardId(d.title),
@@ -99,16 +106,76 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
     model: MODELS.ideate,
     published_url: "",
     hook_breakdown: d.hook_breakdown,
+    riff_on: d.riff_on,
+    riff_type: d.riff_type,
+    their_point: d.their_point,
   };
 }
 
 export type IdeateResult = { files: string[]; usd: number; runId: string | null };
 
+/** Patterns every model reaches for when it has nothing specific to say. */
+const GENERIC = [
+  /\b(isn['’]?t|is not|aren['’]?t|are not|wasn['’]?t|was not)\b[^.?!\n]{0,70}[,;:—–-]\s*(it['’]?s|they['’]?re|it was|but)\b/i,
+  /,\s*not\s+[a-z]/i,
+  /\bnot\s+(about|a|an|the)?\s*\w+(\s+\w+){0,3},?\s+but\b/i,
+  /\b(is|are) earned\b|\bthe real (problem|issue|story|question|bottleneck)\b|\b(was|were) always\b|\bnever (was|existed)\b|\bhere['’]?s the thing\b|\blet that sink in\b/i,
+];
+
+/** Verification loop: deterministic checks on a batch. Returns issues per card index (empty = pass). */
+export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: number): Map<number, string[]> {
+  const ids = new Set(hooks.map((h) => h.item_id));
+  const issues = new Map<number, string[]>();
+  const add = (i: number, m: string) => issues.set(i, [...(issues.get(i) ?? []), m]);
+  const seenRiff = new Map<string, number>();
+  const seenMove = new Map<string, number>();
+  cards.forEach((c, i) => {
+    const first = c.hook.split(/(?<=[.?!])\s|\n/)[0] ?? c.hook;
+    if (GENERIC.some((re) => re.test(first) || re.test(c.title))) add(i, `generic antithesis/aphorism hook or title ("${first.slice(0, 80)}")`);
+    if (c.riff_on && !ids.has(c.riff_on)) add(i, `riff_on "${c.riff_on}" is not a SWIPE FILE id`);
+    if (c.riff_on) {
+      if (seenRiff.has(c.riff_on)) add(i, `riffs on the same post as card ${seenRiff.get(c.riff_on)! + 1}`);
+      else seenRiff.set(c.riff_on, i);
+    }
+    const move = (c.hook_template_used ?? "").toLowerCase().slice(0, 40);
+    if (move) {
+      if (seenMove.has(move)) add(i, `same hook move as card ${seenMove.get(move)! + 1}`);
+      else seenMove.set(move, i);
+    }
+    const opening = c.hook.split(/(?<=[.?!])\s+/).slice(0, 2).join(" ");
+    if (!/\d/.test(opening) && !/\b[A-Z][a-zA-Z]{2,}\b/.test(opening.slice(1))) add(i, "opening has no concrete specific (number, named tool/company/person)");
+  });
+  const riffs = cards.filter((c) => c.riff_on && ids.has(c.riff_on)).length;
+  if (riffs < minRiffs) cards.forEach((c, i) => { if (!c.riff_on) add(i, `batch needs ≥${minRiffs} cards riffing on a swipe-file post (has ${riffs}); make this one a response to a specific post`); });
+  return issues;
+}
+
+/** Generate, check, and repair once: flagged cards are sent back with the reasons and replaced. */
+async function generateChecked(user: string, n: number, hooks: HookRecord[]): Promise<{ cards: CardDraft[]; usd: number; run_id: string | null; repaired: number }> {
+  const first = await callModel({ system: prompt("ideate"), user, n });
+  let cards = first.cards;
+  let usd = first.usd;
+  const issues = verifyCards(cards, hooks, Math.max(1, n - 2));
+  if (!issues.size) return { cards, usd, run_id: first.run_id, repaired: 0 };
+  const flagged = [...issues.keys()];
+  const keep = cards.filter((_, i) => !issues.has(i));
+  const report = flagged.map((i) => `Card ${i + 1} "${cards[i].title}" — hook: "${cards[i].hook}"\n  problems: ${issues.get(i)!.join("; ")}`).join("\n");
+  const repair = await callModel({
+    system: prompt("ideate"),
+    user: `${user}\n\n=====\n\nREVISION REQUIRED\nThese cards failed review:\n${report}\n\nCards already accepted (don't duplicate their posts or hook moves):\n${keep.map((c) => `- [${c.riff_on}] ${c.hook_template_used} :: ${c.hook}`).join("\n") || "(none)"}`,
+    n: flagged.length,
+  });
+  usd += repair.usd;
+  cards = [...keep, ...repair.cards.slice(0, flagged.length)];
+  return { cards, usd, run_id: first.run_id, repaired: flagged.length };
+}
+
 export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean } = {}): Promise<IdeateResult> {
-  const hooks = swipeFile(21, 40);
-  const notes = await workNotes(10, 25);
+  const hooks = swipeFile(21, 45);
+  const notes = await workNotes(10, 20);
   const n = opts.n ?? 7;
-  const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, ""), n });
+  const { cards, usd, run_id, repaired } = await generateChecked(render(hooks, notes, ""), n, hooks);
+  if (repaired) console.error(`ideate: repaired ${repaired} card(s) that failed review`);
   if (opts.dry) {
     for (const c of cards) console.log(`\n[${c.platform}/${c.format}] ${c.title}\n  ${c.hook}`);
     return { files: [], usd, runId: run_id };
