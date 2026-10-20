@@ -38,6 +38,10 @@
   "settings": {
     "org_deploy_enabled": false,
     "socket_mode_enabled": false,
-    "token_rotation_enabled": false
+    "token_rotation_enabled": false,
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://content-agents-slack.dvtdropshot.workers.dev/slack/actions"
+    }
   }
 }

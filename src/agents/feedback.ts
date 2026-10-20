@@ -1,5 +1,6 @@
 import { Client } from "langsmith";
 import { listCards, moveCard, type Card } from "./cards.js";
+import { markDecided } from "./slack-cards.js";
 import { ideateOne } from "./ideate.js";
 import { statePath } from "../lib/paths.js";
 import { appendJsonl } from "../lib/jsonl.js";
@@ -31,13 +32,18 @@ export async function sweepFeedback(log: (m: string) => void = () => {}): Promis
       else if (v === "reject") miss(s, 1);
     }
     appendJsonl(statePath("data", "feedback.jsonl"), [{ card: c.meta.id, verdict: v, why: c.meta.why, sources: c.meta.sources, run_id: c.meta.langsmith_run_id, at: new Date().toISOString() }]);
+    const note = c.meta.why ? ` — “${c.meta.why}”` : "";
+    const slackSafe = (p: Promise<void>) => p.catch((e) => log(`slack update failed: ${e.message}`));
     if (v === "approve") {
       moveCard(c, "approved");
+      await slackSafe(markDecided(c.meta.slack, c, `✅ *Approved*${note}`));
       stats.approved++;
     } else if (v === "reject") {
       moveCard(c, "rejected");
+      await slackSafe(markDecided(c.meta.slack, c, `🗑️ *Rejected*${note}`));
       stats.rejected++;
     } else {
+      await slackSafe(markDecided(c.meta.slack, c, `✍️ *Rewriting*${note} — new version coming below`));
       const r = await ideateOne(c as Card);
       stats.usd += r.usd;
       c.meta.why = `${c.meta.why} (rewritten → ${r.files[0]?.split("/").pop()})`.trim();

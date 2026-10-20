@@ -15,6 +15,8 @@ import { postMessage, sections } from "./lib/slack.js";
 import { distill, loadHooks } from "./agents/distill.js";
 import { ideate } from "./agents/ideate.js";
 import { sweepFeedback } from "./agents/feedback.js";
+import { postCards } from "./agents/slack-cards.js";
+import { listCards } from "./agents/cards.js";
 import { Source } from "../schemas/source.js";
 import { Term } from "../schemas/term.js";
 
@@ -331,6 +333,15 @@ program
   .action(async () => {
     const r = await sweepFeedback(console.error);
     console.log(JSON.stringify(r));
+  });
+
+program
+  .command("repost")
+  .description("re-post every pending inbox card to Slack with buttons")
+  .action(async () => {
+    const files = listCards("inbox").filter((c) => c.meta.verdict === "pending").map((c) => c.file);
+    await postCards(files, `*${files.length} idea cards waiting on you.* Approve, rewrite, or reject each one below.`);
+    console.log(`reposted ${files.length}`);
   });
 
 program.parseAsync().catch((e) => fail(e.message));

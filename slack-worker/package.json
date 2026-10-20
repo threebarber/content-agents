@@ -1,0 +1,6 @@
+{
+  "name": "content-agents-slack-worker",
+  "private": true,
+  "type": "module",
+  "scripts": { "deploy": "wrangler deploy", "tail": "wrangler tail" }
+}

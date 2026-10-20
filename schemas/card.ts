@@ -36,4 +36,5 @@ export type CardMeta = {
   langsmith_run_id: string | null;
   model: string;
   published_url: string;
+  slack?: { channel: string; ts: string };
 };

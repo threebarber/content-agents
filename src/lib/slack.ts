@@ -59,3 +59,7 @@ export async function postMessage(channel: string, text: string, blocks?: Block[
 export function sections(...paragraphs: string[]): Block[] {
   return paragraphs.map((p) => ({ type: "section", text: { type: "mrkdwn", text: p.slice(0, 2900) } }));
 }
+
+export async function updateMessage(channel: string, ts: string, text: string, blocks: Block[]): Promise<void> {
+  await call("chat.update", { channel, ts, text, blocks });
+}

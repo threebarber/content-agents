@@ -1,0 +1,8 @@
+name = "content-agents-slack"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Secrets (wrangler secret put …):
+#   SLACK_SIGNING_SECRET  – Slack app → Basic Information → Signing Secret
+#   SLACK_BOT_TOKEN       – xoxb-… (opens modals within Slack's 3-second window)
+#   TRIGGER_SECRET_KEY    – Trigger.dev PROD secret key (tr_prod_…)

@@ -5,7 +5,7 @@ import { IdeateOutput, type CardDraft, type CardMeta } from "../../schemas/card.
 import { loadHooks } from "./distill.js";
 import { cardBody, cardId, listCards, writeCard, repoUrl, type Card } from "./cards.js";
 import { withDb } from "../lib/duckdb.js";
-import { postMessage, sections } from "../lib/slack.js";
+import { postCards } from "./slack-cards.js";
 import type { HookRecord } from "../../schemas/hook.js";
 
 type BrainRow = { id: string; title: string; text: string; published_at: string; kind: string };
@@ -100,7 +100,7 @@ export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean }
     return { files: [], usd, runId: run_id };
   }
   const files = cards.map((c) => writeCard("inbox", toMeta(c, hooks, run_id, null), cardBody(c)));
-  if (opts.post !== false && process.env.SLACK_BOT_TOKEN) await postBatch(cards, files);
+  if (opts.post !== false && process.env.SLACK_BOT_TOKEN) await postCards(files, `*${files.length} new idea cards.* Approve, rewrite, or reject each one below.`);
   return { files, usd, runId: run_id };
 }
 
@@ -112,19 +112,7 @@ export async function ideateOne(prev: Card): Promise<IdeateResult> {
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: 1 });
   const c = cards[0];
   const file = writeCard("inbox", toMeta(c, hooks, run_id, `rewrite:${prev.meta.id}`), cardBody(c));
-  if (process.env.SLACK_BOT_TOKEN) await postBatch([c], [file], `Rewrite of _${prev.body.split("\n")[0].replace(/^# /, "")}_`);
+  if (process.env.SLACK_BOT_TOKEN) await postCards([file], `Rewrite of _${prev.body.split("\n")[0].replace(/^# /, "")}_ — following your note: “${prev.meta.why}”`);
   return { files: [file], usd, runId: run_id };
 }
 
-async function postBatch(cards: CardDraft[], files: string[], heading?: string) {
-  const channel = process.env.SLACK_CHANNEL || "content-agents";
-  const head = heading ?? `*${cards.length} new idea cards.* Open one, set \`verdict:\` to approve / reject / rewrite, commit.`;
-  const blocks = sections(
-    head,
-    ...cards.map((c, i) => {
-      const url = repoUrl(files[i]);
-      return `*${i + 1}. ${c.title}*  _${c.platform} · ${c.format} · ${c.predicted_score}/10_\n> ${c.hook.replace(/\n/g, "\n> ")}${url ? `\n<${url}|open card>` : ""}`;
-    }),
-  );
-  await postMessage(channel, head, blocks);
-}
