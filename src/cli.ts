@@ -18,6 +18,7 @@ import { sweepFeedback } from "./agents/feedback.js";
 import { postCards } from "./agents/slack-cards.js";
 import { listCards } from "./agents/cards.js";
 import { ingestSocial } from "./agents/social.js";
+import { deriveTerms } from "./agents/terms.js";
 import { Source } from "../schemas/source.js";
 import { Term } from "../schemas/term.js";
 
@@ -184,6 +185,18 @@ terms
     f.terms.push(Term.parse({ id: `term:${slugify(term)}`, term, kind: o.kind, status: o.active ? "active" : "candidate", used_for: o.for.split(","), added_by: o.by, added_at: today(), discovered_via: o.via }));
     saveTerms(f);
     console.log(`added term:${slugify(term)}`);
+  });
+
+terms
+  .command("derive")
+  .description("derive LinkedIn/X search terms from what the active newsletters write about")
+  .option("-n <n>", "", "12")
+  .option("--dry", "show proposals without changing terms.yaml")
+  .action(async (o) => {
+    const r = await deriveTerms({ n: Number(o.n), dry: o.dry });
+    for (const p of r.proposed) console.log(`  ${p.term.padEnd(32)} ${p.why}`);
+    if (!o.dry) console.log(`\nadded: ${r.added.join(", ") || "-"}\nkept: ${r.kept.join(", ") || "-"}\nno longer searched: ${r.retired.join(", ") || "-"}`);
+    console.log(`$${r.usd.toFixed(4)}`);
   });
 
 // ---------- ingest ----------
