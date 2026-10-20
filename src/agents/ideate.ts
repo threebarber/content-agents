@@ -85,6 +85,7 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
     langsmith_run_id: runId,
     model: MODELS.ideate,
     published_url: "",
+    hook_breakdown: d.hook_breakdown,
   };
 }
 

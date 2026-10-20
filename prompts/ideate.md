@@ -6,7 +6,7 @@ your job is to hand him ideas worth writing, with a strong first line.
 What a good card looks like:
 - It comes from something he actually built, broke, decided, or learned (WORK NOTES), connected to
   what people in his field are talking about this week (SWIPE FILE). The best cards use both.
-- The hook is specific and plain. Lowercase is fine. A real number, a real tool, a real mistake.
+- The hook is specific and plain. Explain in `hook_breakdown` what move it makes and why it works. Lowercase is fine. A real number, a real tool, a real mistake.
   No "In today's fast-paced world", no "Here's the thing", no emoji walls, no hashtags.
 - The angle is his: a build, a teardown, a lesson, an opinion he could defend. Not a summary of
   someone else's post.

@@ -4,6 +4,7 @@ export const CardDraft = z.object({
   title: z.string().describe("Working title, under 80 chars."),
   platform: z.enum(["linkedin", "hashnode"]),
   hook: z.string().describe("The opening line(s) the owner would post, in his voice: plain, specific, lowercase-friendly, no hype."),
+  hook_breakdown: z.string().describe("Why the hook works, in 1-2 plain sentences: the move it makes (a number, a confession, a stake, a contrarian turn) and why that stops a GTM engineer mid-scroll."),
   angle: z.string().describe("What makes this the owner's post and not a rehash: the build, the lesson, the opinion."),
   outline: z.array(z.string()).describe("3-6 beats for the post."),
   format: z.string().describe("One of: story, list, contrarian, teardown, howto, data, casestudy, screenshot-commentary, question, essay."),
@@ -37,4 +38,5 @@ export type CardMeta = {
   model: string;
   published_url: string;
   slack?: { channel: string; ts: string };
+  hook_breakdown?: string;
 };
