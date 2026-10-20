@@ -16,7 +16,7 @@ export default defineConfig({
       // On deploy, copy the app's env vars from the local .env into the target environment.
       // TRIGGER_* and STATE_DIR are deliberately excluded. Add GITHUB_TOKEN etc. to .env and redeploy.
       syncEnvVars(async () => {
-        const keys = ["STATE_REPO", "BRAIN_REPO", "GITHUB_TOKEN", "ANTHROPIC_API_KEY", "APIFY_TOKEN", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_TRACING", "SLACK_WEBHOOK_URL", "SLACK_SIGNING_SECRET", "GITHUB_WEBHOOK_SECRET"];
+        const keys = ["STATE_REPO", "BRAIN_REPO", "GITHUB_TOKEN", "BRAIN_GITHUB_TOKEN", "ANTHROPIC_API_KEY", "APIFY_TOKEN", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_TRACING", "SLACK_WEBHOOK_URL", "SLACK_SIGNING_SECRET", "GITHUB_WEBHOOK_SECRET"];
         return keys.filter((k) => process.env[k]).map((k) => ({ name: k, value: process.env[k]! }));
       }),
     ],

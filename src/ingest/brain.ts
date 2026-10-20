@@ -27,9 +27,14 @@ export function loadBrainConfig(): BrainConfig {
   return BrainConfig.parse(YAML.parse(fs.readFileSync(statePath("config", "brain.yaml"), "utf8")));
 }
 
-/** Clone or update the brain repo into a local cache. Uses GITHUB_TOKEN if present, else the ambient git credential helper. */
+/**
+ * Clone or update the brain repo into a local cache.
+ * Token precedence: BRAIN_GITHUB_TOKEN (a separate read-only fine-grained PAT) → GITHUB_TOKEN → ambient git credentials.
+ * GitHub fine-grained PATs apply one permission set to every repo they cover, so a read-only brain token
+ * has to be a second token, not a second scope on the state token.
+ */
 export function syncBrain(repo: string, dir = path.join(codeDir(), ".brain-cache")): string {
-  const token = process.env.GITHUB_TOKEN;
+  const token = process.env.BRAIN_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
   const url = token ? `https://x-access-token:${token}@github.com/${repo}.git` : `https://github.com/${repo}.git`;
   if (fs.existsSync(path.join(dir, ".git"))) {
     execFileSync("git", ["-C", dir, "fetch", "--depth", "1", "origin"], { stdio: "ignore" });
