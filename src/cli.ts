@@ -11,6 +11,7 @@ import { writeItems, existingItemIds, appendJsonl } from "./lib/jsonl.js";
 import { loadBrainConfig, pullBrain } from "./ingest/brain.js";
 import { statePath } from "./lib/paths.js";
 import { withDb, TOP_BY_Z } from "./lib/duckdb.js";
+import { postMessage, sections } from "./lib/slack.js";
 import { Source } from "../schemas/source.js";
 import { Term } from "../schemas/term.js";
 
@@ -277,6 +278,15 @@ program
   .description("run arbitrary SQL against the `items` view")
   .action(async (sql) => {
     await withDb(async (q) => console.log(JSON.stringify(await q(sql), null, 2)));
+  });
+
+program
+  .command("slack <text>")
+  .description("post a message to SLACK_CHANNEL (smoke test for the bot token)")
+  .option("--channel <c>", "", process.env.SLACK_CHANNEL ?? "#content-agents")
+  .action(async (text, o) => {
+    const r = await postMessage(o.channel, text, sections(text));
+    console.log(`posted to ${r.channel} at ${r.ts}`);
   });
 
 program.parseAsync().catch((e) => fail(e.message));

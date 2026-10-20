@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "ca": "tsx src/cli.ts",
+    "ca": "node --env-file-if-exists=.env --import tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
     "dev": "trigger dev",
     "deploy": "trigger deploy"

@@ -28,8 +28,8 @@ negative results).
 | 3 | **Runs on Trigger.dev** (free: $5/mo compute, 10 schedules, ≥1 hr cadence, webhooks). TypeScript: Trigger.dev SDK + LangGraph.js + LangSmith JS. Side trials: LangSmith Fleet for the retro agent; Trigger.dev `chat.agent` for "talk to my swipe file." |
 | 4 | **No automated publishing.** Hashnode API is Pro-only since 2026-05-13 and I want to write myself. Outcome measurement is LinkedIn-only (Apify on my own profile). |
 | 5 | **Voice from Hashnode RSS**, pulled once; approved drafts extend it. |
-| 6 | **Slack: my personal workspace**, incoming webhook into a private channel. Fully separate from notes-repo. |
-| 7 | **`rewrite` verdicts re-run immediately** via a GitHub push webhook on the state repo → Trigger.dev task. Same webhook handles `approve`/`reject` instantly; the hourly sweep becomes a safety net. |
+| 6 | **Slack: my personal workspace** (`jbyaa`), a bot app `content-agents` (manifest in `slack-app/`, managed with the Slack CLI) posting to `#content-agents`. Fully separate from notes-repo. |
+| 7 | **`rewrite` verdicts re-run immediately.** Trigger.dev's inbound webhooks are private beta (requested), so until then: a GitHub Action on the state repo calls the Trigger.dev API on push (`feedback-webhook`), and a ~40-line Cloudflare Worker relays Slack events for intake. Both free. The hourly sweep stays as the safety net. |
 | 8 | **Manual intake is a first-class input.** A post link (with an optional note) dropped in a Slack channel or `queue/saved/` is fetched, distilled, credited to its author as the strongest possible signal, and riffed on immediately (§5b). A publication/profile link becomes a candidate source with an immediate trial. |
 | 9 | **Two repos.** `content-agents` (public: code, prompts, schemas, example config, docs) and a private state repo (my sources, terms, redact list, queue, data, memory). Tasks clone both; repo names come from env vars. |
 
