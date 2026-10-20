@@ -150,3 +150,22 @@ test("your-post tracking keeps only posts you wrote", async () => {
   const snap = fs.readFileSync(path.join(dir, "data/my-posts.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
   assert.deepEqual(snap.map((s) => s.id), ["linkedin:111"]);
 });
+
+test("dedupe: re-pasting a link doesn't re-credit or re-riff; /ca source and pin don't duplicate", async () => {
+  routes.push({ match: /gamma\.substack\.com\/api\/v1\/posts\/hello/, reply: () => ({ id: 77, title: "Hello GTM", slug: "hello", canonical_url: "https://gamma.substack.com/p/hello", post_date: iso(1), audience: "everyone", reactions: { "❤": 9 }, comment_count: 2, body_html: "<p>x</p>", publishedBylines: [{ name: "Gus Gamma" }] }) });
+  const hitsBefore = loadSources().sources.find((s) => s.id === "substack:gamma")!.pheromone.hits;
+  const r = await intake({ text: "<https://gamma.substack.com/p/hello>", urls: ["https://gamma.substack.com/p/hello"], files: [], channel: "C0TEST0001", ts: "9.10" });
+  assert.deepEqual([r.saved.length, r.cards, r.repeats.length], [0, 0, 1]);
+  assert.equal(loadSources().sources.find((s) => s.id === "substack:gamma")!.pheromone.hits, hitsBefore);
+  assert.match(slackCalls("chat.postMessage").at(-1)!.body.text, /Already saved/);
+
+  const { addSource, pinTerm } = await import("../src/agents/slash.ts");
+  routes.push({ match: /^https:\/\/carol-redirect\.example/, reply: () => "<html></html>" });
+  assert.match(await addSource("https://www.linkedin.com/in/Carol/"), /Already following `linkedin:carol`/);
+  const n = loadSources().sources.length;
+  pinTerm("GTM Engineering");
+  pinTerm("gtm engineering");
+  const { loadTerms } = await import("../src/registry/store.ts");
+  assert.equal(loadTerms().terms.filter((t) => t.term.toLowerCase() === "gtm engineering").length, 1);
+  assert.equal(loadSources().sources.length, n);
+});

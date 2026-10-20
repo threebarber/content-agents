@@ -20,7 +20,7 @@ export const intakeTask = task({
     const dir = checkoutState();
     try {
       const r = await intake(p, (m) => logger.info(m));
-      await react(p.channel, p.ts, "eyes", r.saved.length || r.sourcesAdded.length ? "white_check_mark" : "x");
+      await react(p.channel, p.ts, "eyes", r.saved.length || r.sourcesAdded.length ? "white_check_mark" : r.repeats.length ? "recycle" : "x");
       return { ...r, committed: commitState(dir, `intake: ${r.saved.length} saved, ${r.sourcesAdded.length} sources, ${r.cards} cards`) };
     } catch (e) {
       await react(p.channel, p.ts, "eyes", "x");

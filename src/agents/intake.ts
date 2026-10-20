@@ -2,7 +2,8 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { detect } from "../registry/detect.js";
 import { resolveSource } from "../registry/resolve.js";
-import { loadSources, saveSources, loadForaging, findSource, slugify, today } from "../registry/store.js";
+import { loadSources, saveSources, loadForaging, findSource, findExisting, slugify, today } from "../registry/store.js";
+import { itemsById } from "../lib/items.js";
 import { hit } from "../registry/pheromone.js";
 import { Source } from "../../schemas/source.js";
 import type { Item } from "../../schemas/item.js";
@@ -70,7 +71,7 @@ async function readScreenshot(f: { url: string; mimetype: string }): Promise<Ite
 }
 
 /** A link or screenshot the owner dropped in Slack: save it as content, credit its author strongly, riff on it. */
-export async function intake(p: IntakePayload, log: (m: string) => void = () => {}): Promise<{ saved: string[]; sourcesAdded: string[]; cards: number; usd: number }> {
+export async function intake(p: IntakePayload, log: (m: string) => void = () => {}): Promise<{ saved: string[]; sourcesAdded: string[]; cards: number; usd: number; repeats: string[] }> {
   const note = p.text.replace(/<https?:[^>]+>/g, "").trim();
   const reg = loadSources();
   const fo = loadForaging();
@@ -83,7 +84,7 @@ export async function intake(p: IntakePayload, log: (m: string) => void = () => 
     if (d && d.kind === "source") {
       // a publication / profile link: follow it as a candidate
       const s = Source.parse({ id: `${d.type}:${slugify(d.key)}`, type: d.type, url: d.url, status: "active", added_by: "human", added_at: today(), discovered_via: "human:slack", budget_tier: d.type === "substack" ? "cheap" : "normal" });
-      if (!findSource(reg, s.id) && !findSource(reg, d.url)) {
+      if (!(await findExisting(reg, s.id, d.url))) {
         const r = await resolveSource(s).catch(() => null);
         if (r) Object.assign(s, { url: r.url, method: r.method });
         reg.sources.push(s);
@@ -103,6 +104,11 @@ export async function intake(p: IntakePayload, log: (m: string) => void = () => 
     const it = await readScreenshot(f).catch((e) => (log(`screenshot failed: ${e.message}`), null));
     if (it) saved.push(it);
   }
+
+  // a link pasted before: don't re-credit the author or re-riff it, just point back to it
+  const prior = itemsById(saved.map((i) => i.id));
+  const repeats = saved.filter((i) => prior.get(i.id)?.saved_by === "human");
+  for (const r of repeats) saved.splice(saved.indexOf(r), 1);
 
   // save as content + strongest pheromone signal on the author (a manual save beats any automatic hit)
   for (const it of saved) {
@@ -129,10 +135,11 @@ export async function intake(p: IntakePayload, log: (m: string) => void = () => 
     cards = r.files.length;
   }
   const parts = [
+    repeats.length ? `Already saved${repeats.length > 1 ? ` ${repeats.length} of these` : " this"} on ${prior.get(repeats[0].id)!.fetched_at.slice(0, 10)}, so no new ideas from ${repeats.length > 1 ? "them" : "it"}.` : "",
     saved.length ? `Saved ${saved.length} post${saved.length > 1 ? "s" : ""} to the swipe file${cards ? `, ${cards} ideas below` : ""}.` : "",
     sourcesAdded.length ? `Now following: ${sourcesAdded.map((s) => `\`${s}\``).join(", ")}.` : "",
-    !saved.length && !sourcesAdded.length ? "Couldn't read that link. Try a direct post URL or a screenshot." : "",
+    !saved.length && !sourcesAdded.length && !repeats.length ? "Couldn't read that link. Try a direct post URL or a screenshot." : "",
   ].filter(Boolean);
   if (!cards) await postMessage(p.channel, parts.join(" "), sections(parts.join(" ")), p.ts).catch(() => {});
-  return { saved: saved.map((s) => s.id), sourcesAdded, cards, usd };
+  return { saved: saved.map((s) => s.id), sourcesAdded, cards, usd, repeats: repeats.map((r) => r.id) };
 }

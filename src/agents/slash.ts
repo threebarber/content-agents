@@ -1,4 +1,4 @@
-import { loadTerms, saveTerms, loadSources, saveSources, findTerm, findSource, slugify, today } from "../registry/store.js";
+import { loadTerms, saveTerms, loadSources, saveSources, findTerm, findExisting, slugify, today } from "../registry/store.js";
 import { detect } from "../registry/detect.js";
 import { resolveSource } from "../registry/resolve.js";
 import { Term } from "../../schemas/term.js";
@@ -45,7 +45,8 @@ export async function addSource(url: string): Promise<string> {
   if (d.kind === "post") return "That's a single post: paste it in the channel instead and I'll riff on it.";
   const reg = loadSources();
   const id = `${d.type}:${slugify(d.key)}`;
-  if (findSource(reg, id) || findSource(reg, d.url)) return `Already following \`${id}\`.`;
+  const existing = await findExisting(reg, id, d.url);
+  if (existing) return `Already following \`${existing.id}\`${existing.status !== "active" ? ` (${existing.status})` : ""}.`;
   const s = Source.parse({ id, type: d.type, url: d.url, status: "active", added_by: "human", added_at: today(), discovered_via: "human:/ca", budget_tier: d.type === "substack" ? "cheap" : "normal" });
   const r = await resolveSource(s).catch(() => null);
   if (r) Object.assign(s, { url: r.url, method: r.method });

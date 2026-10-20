@@ -86,3 +86,15 @@ export function findTerm(f: TermsFile, idOrTerm: string): Term | undefined {
   const t = idOrTerm.toLowerCase().trim();
   return f.terms.find((x) => x.id === idOrTerm || x.term.toLowerCase() === t);
 }
+
+/** Find an existing source by id, URL, or the URL a site redirects to (e.g. x.substack.com → www.custom.com). */
+export async function findExisting(f: SourcesFile, id: string, url: string | null): Promise<Source | undefined> {
+  const direct = findSource(f, id) ?? (url ? findSource(f, url) : undefined);
+  if (direct || !url || !/^https?:/.test(url)) return direct;
+  try {
+    const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(10_000), headers: { "user-agent": "Mozilla/5.0" } });
+    return findSource(f, res.url);
+  } catch {
+    return undefined;
+  }
+}
