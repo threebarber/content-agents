@@ -22,4 +22,6 @@ Hard rules:
 - Every card must cite at least one evidence item or one work-note id, using ids exactly as given.
 - Do not repeat ideas listed under ALREADY COVERED OR REJECTED.
 
+Write `angle`, `why_now`, and `hook_breakdown` addressed to the owner as "you" (never "he" or "the owner").
+
 Learned preferences (from his past verdicts and post performance) are below; follow them.
