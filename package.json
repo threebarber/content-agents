@@ -4,7 +4,7 @@
   "description": "Loop-driven content agents: swipe-file distillation, idea generation, and ant-colony source foraging for LinkedIn + Hashnode",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "env -u LANGSMITH_API_KEY LANGSMITH_TRACING=false node --import tsx --test --test-concurrency=1 tests/*.test.ts",
     "ca": "node --env-file-if-exists=.env --import tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
     "dev": "trigger dev",

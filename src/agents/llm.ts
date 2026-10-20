@@ -15,6 +15,7 @@ let client: Anthropic | null = null;
 /** Anthropic client, traced to LangSmith when LANGSMITH_API_KEY is set. */
 export function claude(): Anthropic {
   if (client) return client;
+  if (process.env.CA_FAKE_LLM === "1") return (client = fakeClient() as unknown as Anthropic);
   // User-scoped keys (sk-ant-usr…) must name a workspace; workspace-scoped keys don't need it.
   const ws = process.env.ANTHROPIC_WORKSPACE_ID;
   const base = new Anthropic({ maxRetries: 4, ...(ws ? { defaultHeaders: { "anthropic-workspace-id": ws } } : {}) });
@@ -65,4 +66,29 @@ const PRICES: Record<string, [number, number]> = {
 export function costUsd(model: string, usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null }): number {
   const [i, o] = PRICES[model] ?? [4, 20];
   return ((usage.input_tokens + (usage.cache_read_input_tokens ?? 0) * 0.1) * i + usage.output_tokens * o) / 1e6;
+}
+
+/**
+ * Offline test mode (CA_FAKE_LLM=1): `messages.parse` returns whatever the registered handler builds for the request,
+ * so the whole pipeline runs with no API calls. Tests register a handler with setFakeLLM().
+ */
+export type FakeRequest = { model: string; system?: string; messages: { content: unknown }[]; schemaKeys: string[] };
+let fakeHandler: (r: FakeRequest) => unknown = () => {
+  throw new Error("CA_FAKE_LLM=1 but no handler registered (setFakeLLM)");
+};
+export const fakeCalls: FakeRequest[] = [];
+export function setFakeLLM(h: (r: FakeRequest) => unknown): void {
+  fakeHandler = h;
+  fakeCalls.length = 0;
+}
+function fakeClient() {
+  return {
+    messages: {
+      parse: async (req: { model: string; system?: string; messages: { content: unknown }[]; output_config?: { format?: { schema?: { properties?: Record<string, unknown> } } } }) => {
+        const r: FakeRequest = { model: req.model, system: req.system, messages: req.messages, schemaKeys: Object.keys(req.output_config?.format?.schema?.properties ?? {}) };
+        fakeCalls.push(r);
+        return { parsed_output: fakeHandler(r), usage: { input_tokens: 1000, output_tokens: 200 }, stop_reason: "end_turn", content: [] };
+      },
+    },
+  };
 }

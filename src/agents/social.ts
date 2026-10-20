@@ -72,14 +72,24 @@ export async function ingestSocial(log: (m: string) => void = () => {}): Promise
   }
 
   // 3. the owner's own LinkedIn posts: outcome snapshots (48h / 7d / later all just append; analysis picks the right one)
-  const me = reg.me.linkedin_profile;
-  if (me) {
-    const r = await run("my linkedin posts", () => linkedInProfilePosts([me], 20, "month"));
-    const mine = r.items.map((i) => ({ ...i, source_id: "me:linkedin" }));
-    writeItems(mine);
-    appendJsonl(statePath("data", "my-posts.jsonl"), mine.map((i) => ({ id: i.id, url: i.url, published_at: i.published_at, at: new Date().toISOString(), likes: i.metrics.likes, comments: i.metrics.comments, shares: i.metrics.shares, first_line: i.title })));
-    stats.mine = mine.length;
+  if (reg.me.linkedin_profile) {
+    const r = await trackMyPosts(reg.me.linkedin_profile).catch((e) => (stats.errors.push(`my linkedin posts: ${(e as Error).message.slice(0, 200)}`), 0));
+    stats.mine = r;
+    log(`my linkedin posts: ${r} tracked`);
   }
   saveSources(reg);
   return stats;
+}
+
+/**
+ * Snapshot the owner's own LinkedIn posts (likes/comments/shares over time). Only posts they authored count:
+ * the profile feed can include company posts and reshares written by others.
+ */
+export async function trackMyPosts(profileUrl: string): Promise<number> {
+  const handle = profileUrl.replace(/\/+$/, "").split("/").pop()!.toLowerCase();
+  const items = (await linkedInProfilePosts([profileUrl], 20, "month")).filter((i) => i.source_id === `linkedin:${handle}`);
+  const mine = items.map((i) => ({ ...i, source_id: "me:linkedin" }));
+  writeItems(mine);
+  appendJsonl(statePath("data", "my-posts.jsonl"), mine.map((i) => ({ id: i.id, url: i.url, published_at: i.published_at, at: new Date().toISOString(), likes: i.metrics.likes, comments: i.metrics.comments, shares: i.metrics.shares, first_line: i.title })));
+  return mine.length;
 }
