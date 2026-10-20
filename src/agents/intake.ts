@@ -82,7 +82,7 @@ export async function intake(p: IntakePayload, log: (m: string) => void = () => 
     const d = detect(url);
     if (d && d.kind === "source") {
       // a publication / profile link: follow it as a candidate
-      const s = Source.parse({ id: `${d.type}:${slugify(d.key)}`, type: d.type, url: d.url, status: "candidate", added_by: "human", added_at: today(), discovered_via: "human:slack", budget_tier: d.type === "substack" ? "cheap" : "normal" });
+      const s = Source.parse({ id: `${d.type}:${slugify(d.key)}`, type: d.type, url: d.url, status: "active", added_by: "human", added_at: today(), discovered_via: "human:slack", budget_tier: d.type === "substack" ? "cheap" : "normal" });
       if (!findSource(reg, s.id) && !findSource(reg, d.url)) {
         const r = await resolveSource(s).catch(() => null);
         if (r) Object.assign(s, { url: r.url, method: r.method });
@@ -130,7 +130,7 @@ export async function intake(p: IntakePayload, log: (m: string) => void = () => 
   }
   const parts = [
     saved.length ? `Saved ${saved.length} post${saved.length > 1 ? "s" : ""} to the swipe file${cards ? `, ${cards} ideas below` : ""}.` : "",
-    sourcesAdded.length ? `Now following (as candidates): ${sourcesAdded.map((s) => `\`${s}\``).join(", ")}.` : "",
+    sourcesAdded.length ? `Now following: ${sourcesAdded.map((s) => `\`${s}\``).join(", ")}.` : "",
     !saved.length && !sourcesAdded.length ? "Couldn't read that link. Try a direct post URL or a screenshot." : "",
   ].filter(Boolean);
   if (!cards) await postMessage(p.channel, parts.join(" "), sections(parts.join(" ")), p.ts).catch(() => {});

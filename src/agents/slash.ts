@@ -45,12 +45,12 @@ export async function addSource(url: string): Promise<string> {
   const reg = loadSources();
   const id = `${d.type}:${slugify(d.key)}`;
   if (findSource(reg, id) || findSource(reg, d.url)) return `Already following \`${id}\`.`;
-  const s = Source.parse({ id, type: d.type, url: d.url, status: "candidate", added_by: "human", added_at: today(), discovered_via: "human:/ca", budget_tier: d.type === "substack" ? "cheap" : "normal" });
+  const s = Source.parse({ id, type: d.type, url: d.url, status: "active", added_by: "human", added_at: today(), discovered_via: "human:/ca", budget_tier: d.type === "substack" ? "cheap" : "normal" });
   const r = await resolveSource(s).catch(() => null);
   if (r) Object.assign(s, { url: r.url, method: r.method });
   reg.sources.push(s);
   saveSources(reg);
-  return `Following \`${id}\` as a candidate. It gets a trial pull on the next run and is promoted if its posts are strong.`;
+  return `Following \`${id}\`. Its posts are pulled from the next run on.`;
 }
 
 export async function runSlash(text: string): Promise<{ reply: string; public?: boolean }> {
