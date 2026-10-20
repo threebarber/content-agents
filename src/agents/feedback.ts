@@ -2,6 +2,9 @@ import { Client } from "langsmith";
 import { listCards, moveCard, type Card } from "./cards.js";
 import { markDecided } from "./slack-cards.js";
 import { ideateOne } from "./ideate.js";
+import { draftCard } from "./draft.js";
+import { readCard } from "./cards.js";
+import fs from "node:fs";
 import { statePath } from "../lib/paths.js";
 import { appendJsonl } from "../lib/jsonl.js";
 import { loadSources, saveSources, loadForaging, findSource } from "../registry/store.js";
@@ -15,6 +18,17 @@ export type FeedbackStats = { approved: number; rejected: number; rewritten: num
 export async function sweepFeedback(log: (m: string) => void = () => {}): Promise<FeedbackStats> {
   const decided = listCards("inbox").filter((c) => c.meta.verdict && c.meta.verdict !== "pending");
   const stats: FeedbackStats = { approved: 0, rejected: 0, rewritten: 0, usd: 0 };
+  // retry drafts that failed on a previous sweep (approved but never drafted)
+  for (const c of listCards("approved")) {
+    try {
+      const d = await draftCard(c);
+      stats.usd += d.usd;
+      fs.unlinkSync(c.file);
+      log(`drafted (retry): ${c.meta.id}`);
+    } catch (e) {
+      log(`draft retry failed for ${c.meta.id}: ${(e as Error).message}`);
+    }
+  }
   if (!decided.length) return stats;
   const ls = process.env.LANGSMITH_API_KEY ? new Client() : null;
   const fo = loadForaging();
@@ -35,8 +49,17 @@ export async function sweepFeedback(log: (m: string) => void = () => {}): Promis
     const note = c.meta.why ? ` — “${c.meta.why}”` : "";
     const slackSafe = (p: Promise<void>) => p.catch((e) => log(`slack update failed: ${e.message}`));
     if (v === "approve") {
-      moveCard(c, "approved");
-      await slackSafe(markDecided(c.meta.slack, c, `✅ *Approved*${note}`));
+      const approvedFile = moveCard(c, "approved");
+      await slackSafe(markDecided(c.meta.slack, c, `✅ *Approved*${note} — drafting now, it'll appear in this thread`));
+      try {
+        const d = await draftCard(readCard(approvedFile));
+        stats.usd += d.usd;
+        fs.unlinkSync(approvedFile); // lives in queue/drafted now
+        await slackSafe(markDecided(c.meta.slack, c, `✅ *Approved*${note} — draft (${d.words} words) in the thread ↓`));
+      } catch (e) {
+        log(`draft failed for ${c.meta.id}: ${(e as Error).message}`);
+        await slackSafe(markDecided(c.meta.slack, c, `✅ *Approved*${note} — draft failed, will retry next sweep`));
+      }
       stats.approved++;
     } else if (v === "reject") {
       moveCard(c, "rejected");

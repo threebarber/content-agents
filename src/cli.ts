@@ -19,6 +19,8 @@ import { postCards } from "./agents/slack-cards.js";
 import { listCards } from "./agents/cards.js";
 import { ingestSocial } from "./agents/social.js";
 import { deriveTerms } from "./agents/terms.js";
+import { retro } from "./agents/retro.js";
+import { pinTerm, unpinTerm } from "./agents/slash.js";
 import { Source } from "../schemas/source.js";
 import { Term } from "../schemas/term.js";
 
@@ -191,31 +193,12 @@ terms
   .command("pin <term>")
   .description("always search this term on LinkedIn + X; the weekly re-derive never drops it")
   .option("--no-x", "LinkedIn only")
-  .action((term, o) => {
-    const f = loadTerms();
-    let t = findTerm(f, term);
-    if (!t) {
-      t = Term.parse({ id: `term:${slugify(term)}`, term: term.toLowerCase(), kind: "topic", status: "active", added_by: "human", added_at: today(), discovered_via: "human pin" });
-      f.terms.push(t);
-    }
-    t.pinned = true;
-    t.status = "active";
-    t.used_for = [...new Set([...t.used_for, "tagging", "candidate_relevance", "linkedin_search", ...(o.x ? ["x_search"] : [])])] as typeof t.used_for;
-    saveTerms(f);
-    console.log(`📌 pinned "${t.term}" [${t.used_for.join(",")}]`);
-  });
+  .action((term, o) => console.log(pinTerm(term, o.x)));
 
 terms
   .command("unpin <term>")
   .description("let the weekly re-derive decide whether to keep searching this term")
-  .action((term) => {
-    const f = loadTerms();
-    const t = findTerm(f, term);
-    if (!t) return fail(`no term ${term}`);
-    t.pinned = false;
-    saveTerms(f);
-    console.log(`unpinned "${t.term}"`);
-  });
+  .action((term) => console.log(unpinTerm(term)));
 
 terms
   .command("derive")
@@ -395,6 +378,13 @@ program
     await postCards(files, `*${files.length} idea cards waiting on you.* Approve, rewrite, or reject each one below.`);
     console.log(`reposted ${files.length}`);
   });
+
+program
+  .command("retro")
+  .description("run the weekly retro now (memory updates + proposals)")
+  .option("--days <n>", "", "7")
+  .option("--no-post", "don't post to Slack")
+  .action(async (o) => console.log(JSON.stringify(await retro({ days: Number(o.days), post: o.post }))));
 
 program.parseAsync().catch((e) => fail(e.message));
 

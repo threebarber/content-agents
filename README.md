@@ -5,8 +5,8 @@ creators you follow, idea cards seeded from your own work notes, and an ant-colo
 that discovers new sources on its own. Runs on free tiers (Trigger.dev, LangSmith, Substack's public
 API, Apify's monthly credit) for roughly $5–10/month in model calls.
 
-**Status: Phase 1.** Registry, ingestion, swipe-file distillation, twice-weekly idea cards in Slack, and the verdict loop run on Trigger.dev.
-LinkedIn ingestion, drafting, and the weekly retro are next. See [PLAN.md](PLAN.md).
+**Status: Phases 1–4.** Newsletter + LinkedIn + X ingestion, swipe-file distillation, idea cards with Slack buttons,
+drafts on approve, a Friday retro that updates its own memory, and link/screenshot intake. See [how it works](docs/how-it-works.md).
 
 ## How it works (short)
 

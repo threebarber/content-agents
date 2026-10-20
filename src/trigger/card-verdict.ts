@@ -1,11 +1,10 @@
-import { task, logger, queue } from "@trigger.dev/sdk";
+import { task, logger } from "@trigger.dev/sdk";
+import { stateWrites } from "./queues.js";
 import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
 import { listCards, writeCard } from "../agents/cards.js";
 import { sweepFeedback } from "../agents/feedback.js";
 import { markDecided } from "../agents/slack-cards.js";
 
-/** One verdict at a time, so concurrent clicks never race on the state repo. */
-const verdicts = queue({ name: "verdicts", concurrencyLimit: 1 });
 
 export type CardVerdictPayload = {
   cardId: string;
@@ -18,7 +17,7 @@ export type CardVerdictPayload = {
 /** Triggered by the Slack button worker (slack-worker/). Applies the verdict, runs the feedback loop, commits. */
 export const cardVerdict = task({
   id: "card-verdict",
-  queue: verdicts,
+  queue: stateWrites,
   maxDuration: 600,
   run: async (p: CardVerdictPayload) => {
     if (!stateToken()) throw new Error("missing STATE_GITHUB_TOKEN");

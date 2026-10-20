@@ -22,11 +22,21 @@ export function claude(): Anthropic {
   return client;
 }
 
-/** Load a prompt: state/prompts/overrides/<name>.md if present (private tweaks), else prompts/<name>.md (public). */
+/**
+ * Load a prompt: the public base (prompts/<name>.md) plus private learned rules accepted from retros
+ * (state/prompts/rules/<name>.md). A full private override (state/prompts/overrides/<name>.md) still wins if present.
+ */
 export function prompt(name: string): string {
   const override = statePath("prompts", "overrides", `${name}.md`);
   if (fs.existsSync(override)) return fs.readFileSync(override, "utf8");
-  return fs.readFileSync(path.join(codeDir(), "prompts", `${name}.md`), "utf8");
+  const base = fs.readFileSync(path.join(codeDir(), "prompts", `${name}.md`), "utf8");
+  const rules = statePath("prompts", "rules", `${name}.md`);
+  return fs.existsSync(rules) ? `${base.trim()}\n\nRules learned from the owner's feedback (follow these):\n${fs.readFileSync(rules, "utf8").trim()}\n` : base;
+}
+
+export function addPromptRule(name: string, rule: string): void {
+  const f = statePath("prompts", "rules", `${name}.md`);
+  fs.appendFileSync(f, `- ${rule.trim()}\n`);
 }
 
 export function readMemory(name: string): string {

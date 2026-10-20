@@ -130,3 +130,19 @@ export async function ideateOne(prev: Card): Promise<IdeateResult> {
   return { files: [file], usd, runId: run_id };
 }
 
+
+/** Riff on posts the owner dropped into Slack (links or screenshots), steered by his note. */
+export async function ideateFromSaved(items: { id: string; author: string | null; title: string | null; text: string; metrics: { likes: number | null; comments: number | null } }[], note: string, thread?: { channel: string; ts: string }): Promise<IdeateResult> {
+  const hooks = swipeFile(21, 20);
+  const notes = await workNotes(14, 15);
+  const saved = items.map((i) => `[${i.id}] ${i.author ?? "?"} (❤️${i.metrics.likes ?? "?"} 💬${i.metrics.comments ?? "?"})\n${i.text.slice(0, 3000)}`).join("\n\n");
+  const extra = `THE OWNER SAVED THIS FOR YOU\nHe dropped these post(s) into Slack because they caught his eye${note ? `, with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${items.length > 1 ? 3 : 2} cards that riff on what he saved, connected to his own work where it fits. One may be a screenshot-commentary card (quote the post, add his take). Cite the saved item ids in evidence.`;
+  const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: items.length > 1 ? 3 : 2 });
+  const files = cards.map((c) => {
+    const meta = toMeta(c, hooks, run_id, `saved:${items[0]?.id}`);
+    meta.evidence = [...new Set([...meta.evidence, ...items.map((i) => i.id)])];
+    return writeCard("inbox", meta, cardBody(c));
+  });
+  if (process.env.SLACK_BOT_TOKEN) await postCards(files, `*${files.length} ideas from what you saved*`, thread);
+  return { files, usd, runId: run_id };
+}

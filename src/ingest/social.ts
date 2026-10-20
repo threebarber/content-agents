@@ -50,9 +50,10 @@ function liItem(p: LiPost, foundVia?: string): Item | null {
 /** Engagement-bait and spam patterns that dominate X search results. */
 const X_SPAM = /looking to engage with|follow (me|back)|drop your|let'?s connect|giveaway|airdrop|we'?re hiring|dm me for/i;
 
-function xItem(t: Tweet, foundVia?: string): Item | null {
+function xItem(t: Tweet, foundVia?: string, strict = true): Item | null {
   const text = (t.fullText ?? t.text ?? "").trim();
-  if (!text || t.isRetweet || t.isReply || X_SPAM.test(text) || !t.createdAt) return null;
+  if (!text || !t.createdAt) return null;
+  if (strict && (t.isRetweet || t.isReply || X_SPAM.test(text))) return null;
   const handle = (t.author?.userName ?? "unknown").toLowerCase();
   return {
     id: `x:${t.id}`,
@@ -109,4 +110,16 @@ export async function xHandlePosts(handles: string[], perHandle: number, sinceDa
   const start = new Date(Date.now() - sinceDays * 86400000).toISOString().slice(0, 10);
   const raw = await runActor<Tweet>(X_SCRAPER, { twitterHandles: handles, maxItems: perHandle * handles.length, sort: "Latest", start });
   return raw.flatMap((t) => xItem(t) ?? []);
+}
+
+/** A single LinkedIn post by URL (the profile-posts actor accepts post URLs). */
+export async function linkedInPostByUrl(url: string): Promise<Item | null> {
+  const raw = await runActor<LiPost>(LI_PROFILE, { targetUrls: [url], maxPosts: 1 });
+  return raw.map((p) => liItem(p)).find((i): i is Item => !!i) ?? null;
+}
+
+/** A single tweet by URL. */
+export async function xPostByUrl(url: string): Promise<Item | null> {
+  const raw = await runActor<Tweet>(X_SCRAPER, { startUrls: [url], maxItems: 1 });
+  return raw[0] ? xItem(raw[0], undefined, false) : null; // explicitly saved: skip the spam/reply filters
 }

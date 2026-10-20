@@ -1,13 +1,10 @@
-import fs from "node:fs";
-import path from "node:path";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { postMessage, updateMessage, sections } from "../lib/slack.js";
 import { readCard, writeCard, repoUrl, type Card } from "./cards.js";
 import { loadHooks } from "./distill.js";
 import { claude, MODELS } from "./llm.js";
-import { statePath } from "../lib/paths.js";
-import type { Item } from "../../schemas/item.js";
+import { itemsById } from "../lib/items.js";
 
 type Block = Record<string, unknown>;
 
@@ -37,26 +34,6 @@ const FORMAT: Record<string, string> = {
   essay: "Essay: argue one idea",
 };
 const fmtKey = (f: string) => f.toLowerCase().replace(/[^a-z]/g, "");
-
-/** Read engagement for the items a card cites. */
-function itemsById(ids: string[]): Map<string, Item> {
-  const want = new Set(ids);
-  const out = new Map<string, Item>();
-  const root = statePath("data", "items", ".x");
-  const base = path.dirname(root);
-  for (const type of fs.existsSync(base) ? fs.readdirSync(base) : []) {
-    const dir = path.join(base, type);
-    if (!fs.statSync(dir).isDirectory()) continue;
-    for (const f of fs.readdirSync(dir)) {
-      for (const line of fs.readFileSync(path.join(dir, f), "utf8").split("\n")) {
-        if (!line) continue;
-        const id = line.match(/^\{"id":"([^"]+)"/)?.[1];
-        if (id && want.has(id)) out.set(id, JSON.parse(line));
-      }
-    }
-  }
-  return out;
-}
 
 function vsUsual(z: number | null): string {
   if (z == null) return "";
@@ -148,14 +125,15 @@ async function ensureBreakdown(card: Card): Promise<void> {
 }
 
 /** Post a heading, then one message per card (each can be decided and updated on its own). Records the Slack ts on each card. */
-export async function postCards(files: string[], heading: string): Promise<void> {
-  const channel = process.env.SLACK_CHANNEL || "content-agents";
-  await postMessage(channel, heading, sections(heading));
+export async function postCards(files: string[], heading: string, thread?: { channel: string; ts: string }): Promise<void> {
+  const channel = thread?.channel ?? (process.env.SLACK_CHANNEL || "content-agents");
+  const threadTs = thread?.ts;
+  await postMessage(channel, heading, sections(heading), threadTs);
   for (const f of files) {
     const card = readCard(f);
     await ensureBreakdown(card).catch(() => {});
     const { title } = parseBody(card.body);
-    const r = await postMessage(channel, title, cardBlocks(card));
+    const r = await postMessage(channel, title, cardBlocks(card), threadTs);
     card.meta.slack = { channel: r.channel, ts: r.ts };
     writeCard("inbox", card.meta, card.body);
   }

@@ -1,6 +1,8 @@
 /**
  * Slack interactivity endpoint for content-agents.
- * Approve → trigger `card-verdict` now. Reject / Rewrite → open a modal for a note, trigger on submit.
+ * /slack/actions  – card buttons (Approve now; Reject/Rewrite open a note modal) and retro proposal buttons
+ * /slack/events   – a link or screenshot posted in the channel (or a DM) → `intake` task
+ * /slack/commands – `/ca …` → `slash-command` task
  * Slack needs a response within 3s and a modal must open within 3s of the click, so that part lives here;
  * everything slow (git, LLM rewrites) runs in the Trigger.dev task.
  */
@@ -35,8 +37,8 @@ async function slack(env: Env, method: string, body: unknown): Promise<any> {
   return r.json();
 }
 
-async function trigger(env: Env, payload: Record<string, unknown>): Promise<void> {
-  const r = await fetch("https://api.trigger.dev/api/v1/tasks/card-verdict/trigger", {
+async function trigger(env: Env, payload: Record<string, unknown>, taskId = "card-verdict"): Promise<void> {
+  const r = await fetch(`https://api.trigger.dev/api/v1/tasks/${taskId}/trigger`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${env.TRIGGER_SECRET_KEY}` },
     body: JSON.stringify({ payload }),
@@ -76,15 +78,67 @@ function modal(meta: Meta, title: string) {
   };
 }
 
+/** Message events: a human posting a link or a screenshot becomes an intake run. */
+async function events(env: Env, req: Request, body: string): Promise<Response> {
+  const e = JSON.parse(body);
+  if (e.type === "url_verification") return Response.json({ challenge: e.challenge });
+  if (req.headers.get("x-slack-retry-num")) return new Response(""); // Slack retries if we were slow; first delivery already triggered
+  const ev = e.event ?? {};
+  if (e.type !== "event_callback" || ev.type !== "message" || ev.bot_id || ev.thread_ts) return new Response("");
+  if (ev.subtype && ev.subtype !== "file_share") return new Response("");
+  const text: string = ev.text ?? "";
+  const urls = [...text.matchAll(/<(https?:\/\/[^>|]+)(?:\|[^>]*)?>/g)].map((m) => m[1]);
+  const files = (ev.files ?? []).filter((f: any) => String(f.mimetype ?? "").startsWith("image/")).map((f: any) => ({ url: f.url_private, mimetype: f.mimetype, name: f.name }));
+  if (!urls.length && !files.length) return new Response("");
+  await slack(env, "reactions.add", { channel: ev.channel, timestamp: ev.ts, name: "eyes" });
+  await trigger(env, { text, urls, files, channel: ev.channel, ts: ev.ts, user: ev.user }, "intake");
+  return new Response("");
+}
+
+/** `/ca <subcommand>`: acknowledge immediately, do the work in a task, answer via response_url. */
+async function command(env: Env, body: string): Promise<Response> {
+  const f = new URLSearchParams(body);
+  const text = (f.get("text") ?? "").trim();
+  if (!text || text === "help") {
+    return Response.json({
+      response_type: "ephemeral",
+      text: [
+        "*content-agents commands*",
+        "`/ca pin <term>` — always search this term on LinkedIn + X",
+        "`/ca unpin <term>` — let the weekly re-derive decide",
+        "`/ca terms` — what's being searched and how each term is doing",
+        "`/ca source <url>` — follow a newsletter / LinkedIn profile / X account (starts as a candidate)",
+        "`/ca ideate` — generate a fresh batch of idea cards now",
+        "Or just paste a post link or screenshot in the channel and I'll riff on it.",
+      ].join("\n"),
+    });
+  }
+  await trigger(env, { text, user: f.get("user_name"), channel: f.get("channel_id"), response_url: f.get("response_url") }, "slash-command");
+  return Response.json({ response_type: "ephemeral", text: `⏳ \`/ca ${text}\`` });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/health") return Response.json({ ok: true });
-    if (req.method !== "POST" || url.pathname !== "/slack/actions") return new Response("not found", { status: 404 });
-
+    if (req.method !== "POST") return new Response("not found", { status: 404 });
     const body = await req.text();
     if (!(await verify(req, body, env.SLACK_SIGNING_SECRET))) return new Response("bad signature", { status: 401 });
+
+    if (url.pathname === "/slack/events") return events(env, req, body);
+    if (url.pathname === "/slack/commands") return command(env, body);
+    if (url.pathname !== "/slack/actions") return new Response("not found", { status: 404 });
     const payload = JSON.parse(new URLSearchParams(body).get("payload") ?? "{}");
+
+    if (payload.type === "block_actions" && ["accept_proposal", "skip_proposal"].includes(payload.actions?.[0]?.action_id)) {
+      const a = payload.actions[0];
+      const decision = a.action_id === "accept_proposal" ? "accept" : "skip";
+      const channel = payload.channel?.id ?? payload.container?.channel_id;
+      const ts = payload.container?.message_ts;
+      await slack(env, "chat.update", { channel, ts, text: "Working…", blocks: pending(payload.message?.blocks ?? [], decision === "accept" ? "⏳ Applying…" : "⏳ Skipping…") });
+      await trigger(env, { proposalId: a.value, decision, user: payload.user?.username }, "apply-proposal");
+      return new Response("");
+    }
 
     if (payload.type === "block_actions") {
       const action = payload.actions?.[0];

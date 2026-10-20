@@ -17,7 +17,16 @@
     "bot_user": {
       "display_name": "content-agents",
       "always_online": false
-    }
+    },
+    "slash_commands": [
+      {
+        "command": "/ca",
+        "url": "https://content-agents-slack.dvtdropshot.workers.dev/slack/commands",
+        "description": "content-agents: pin terms, follow sources, ideate now",
+        "usage_hint": "pin <term> | unpin <term> | terms | source <url> | ideate | help",
+        "should_escape": false
+      }
+    ]
   },
   "oauth_config": {
     "scopes": {
@@ -31,7 +40,10 @@
         "links:read",
         "reactions:read",
         "users:read",
-        "channels:manage"
+        "channels:manage",
+        "commands",
+        "reactions:write",
+        "im:history"
       ]
     }
   },
@@ -42,6 +54,13 @@
     "interactivity": {
       "is_enabled": true,
       "request_url": "https://content-agents-slack.dvtdropshot.workers.dev/slack/actions"
+    },
+    "event_subscriptions": {
+      "request_url": "https://content-agents-slack.dvtdropshot.workers.dev/slack/events",
+      "bot_events": [
+        "message.channels",
+        "message.im"
+      ]
     }
   }
 }
