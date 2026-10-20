@@ -16,4 +16,7 @@ Idea quality and source quality are separate. A reject with "source post rated: 
 post it riffed on was worth it: learn from the idea, not against the source. Keep source judgments out of the idea
 memories ("what works" / "what to avoid" are about ideas, angles, hooks, and formats).
 
+Bullets tagged [direct feedback] are things the owner said outright: keep them verbatim, never drop or soften them.
+Inferred bullets must never name a specific project of his as the example to emulate.
+
 Base everything on the evidence given. With little feedback, say so and keep changes small.

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import YAML from "yaml";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
 import { claude, MODELS, prompt, readMemory, costUsd } from "./llm.js";
@@ -34,14 +36,57 @@ function swipeFile(days: number, k: number): HookRecord[] {
   }
 }
 
-async function workNotes(days: number, k: number): Promise<BrainRow[]> {
+/** Project key for a work-note item id: sessions/2026-10/2026-10-19-golden-rfp#x → golden-rfp; projects/dealroom#x → dealroom. */
+export function projectKey(id: string): string {
+  const path = id.replace(/^brain:/, "").split("#")[0];
+  const base = path.split("/").pop() ?? path;
+  return base.replace(/^\d{4}-\d{2}-\d{2}-?/, "").replace(/\.log$/, "") || base;
+}
+
+/**
+ * Work notes for ideation: a 30-day window, at most `perProject` sections from any one project, interleaved across
+ * projects so one busy day can't flood the context. Daily notes count as one project per week.
+ */
+async function workNotes(days: number, k: number, perProject = 2): Promise<BrainRow[]> {
   const since = new Date(Date.now() - days * 86400000).toISOString();
-  const rows = await withDb((q) =>
+  const rows = (await withDb((q) =>
     q(`SELECT id, title, text, published_at::VARCHAR AS published_at, tags[1] AS kind FROM items
        WHERE source_id = 'brain' AND published_at >= '${since}' AND tags[1] IN ('session','daily','project','ideas','knowledge')
-       ORDER BY CASE tags[1] WHEN 'session' THEN 0 WHEN 'daily' THEN 1 WHEN 'ideas' THEN 2 ELSE 3 END, published_at DESC LIMIT ${k}`),
-  );
-  return rows as unknown as BrainRow[];
+       AND length(text) > 200 ORDER BY published_at DESC`),
+  )) as unknown as BrainRow[];
+  const byProject = new Map<string, BrainRow[]>();
+  for (const r of rows) {
+    const key = r.kind === "daily" ? `daily-${r.published_at.slice(0, 7)}` : projectKey(r.id);
+    const list = byProject.get(key) ?? [];
+    if (list.length < perProject) list.push(r);
+    byProject.set(key, list);
+  }
+  // round-robin across projects (deterministic shuffle by key so the order isn't always newest-first)
+  const groups = [...byProject.entries()].sort((a, b) => hash(a[0]) - hash(b[0])).map(([, v]) => v);
+  const out: BrainRow[] = [];
+  for (let i = 0; out.length < k && groups.some((g) => g[i]); i++) for (const g of groups) if (g[i] && out.length < k) out.push(g[i]);
+  return out;
+  function hash(s: string) {
+    let h = new Date().getUTCDate();
+    for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return h;
+  }
+}
+
+type AvoidTopic = { pattern: string; why: string };
+export function avoidTopics(): AvoidTopic[] {
+  const f = statePath("config", "avoid-topics.yaml");
+  if (!fs.existsSync(f)) return [];
+  return (YAML.parse(fs.readFileSync(f, "utf8"))?.topics ?? []) as AvoidTopic[];
+}
+
+/** Titles + riffs of cards from the last `days` days (any queue): the next batch must pick different topics. */
+function recentTopics(days: number): string {
+  const since = Date.now() - days * 86400000;
+  const lines: string[] = [];
+  for (const q of ["inbox", "approved", "rejected", "drafted", "published"] as const)
+    for (const c of listCards(q)) if (new Date(c.meta.created_at).getTime() >= since) lines.push(`- ${c.body.split("\n")[0].replace(/^# /, "")}${c.meta.their_point ? ` (riff on: ${c.meta.their_point.slice(0, 90)})` : ""}`);
+  return lines.join("\n");
 }
 
 function covered(): string {
@@ -65,9 +110,11 @@ function render(hooks: HookRecord[], notes: BrainRow[], extra: string): string {
   return [
     `LEARNED PREFERENCES\n${readMemory("winning-patterns") || "(none yet — first runs)"}\n\nREJECTED PATTERNS\n${readMemory("rejected") || "(none yet)"}`,
     `ALREADY COVERED OR REJECTED\n${covered()}`,
+    `TOPICS FROM THE LAST TWO BATCHES (pick different topics, different posts, different projects)\n${recentTopics(8) || "(none)"}`,
+    `NEVER THE TOPIC (may appear only as a one-line supporting example)\n${avoidTopics().map((t) => `- /${t.pattern}/ — ${t.why}`).join("\n") || "(none)"}`,
     `HIS RECENT LINKEDIN POSTS (his real voice and what landed; don't repeat these)\n${myPosts(15) || "(none fetched yet)"}`,
     `SWIPE FILE (top posts from newsletters he follows and from LinkedIn/X searches on his topics, last 3 weeks)\n\n${sw || "(empty)"}`,
-    `WORK NOTES (redacted, last 10 days)\n\n${wn || "(none)"}`,
+    `WORK NOTES (redacted, last 30 days, spread across projects — evidence, not topics)\n\n${wn || "(none)"}`,
     extra,
   ].join("\n\n=====\n\n");
 }
@@ -145,6 +192,13 @@ export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: n
     const opening = c.hook.split(/(?<=[.?!])\s+/).slice(0, 2).join(" ");
     if (!/\d/.test(opening) && !/\b[A-Z][a-zA-Z]{2,}\b/.test(opening.slice(1))) add(i, "opening has no concrete specific (number, named tool/company/person)");
   });
+  const avoid = avoidTopics().map((t) => ({ re: new RegExp(t.pattern, "i"), why: t.why }));
+  const perProject = new Map<string, number[]>();
+  cards.forEach((c, i) => {
+    for (const a of avoid) if (a.re.test(c.title) || a.re.test(c.hook)) add(i, `topic is on the never-the-topic list (${a.why}); make the post about something the audience cares about`);
+    for (const key of new Set((c.brain_refs ?? []).map(projectKey))) perProject.set(key, [...(perProject.get(key) ?? []), i]);
+  });
+  for (const [key, idx] of perProject) if (idx.length > 2) for (const i of idx.slice(2)) add(i, `third card leaning on the same work project (${key}); use a different project or none`);
   const riffs = cards.filter((c) => c.riff_on && ids.has(c.riff_on)).length;
   if (riffs < minRiffs) cards.forEach((c, i) => { if (!c.riff_on) add(i, `batch needs ≥${minRiffs} cards riffing on a swipe-file post (has ${riffs}); make this one a response to a specific post`); });
   return issues;
@@ -172,7 +226,7 @@ async function generateChecked(user: string, n: number, hooks: HookRecord[]): Pr
 
 export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean } = {}): Promise<IdeateResult> {
   const hooks = swipeFile(21, 45);
-  const notes = await workNotes(10, 20);
+  const notes = await workNotes(30, 20);
   const n = opts.n ?? 7;
   const { cards, usd, run_id, repaired } = await generateChecked(render(hooks, notes, ""), n, hooks);
   if (repaired) console.error(`ideate: repaired ${repaired} card(s) that failed review`);

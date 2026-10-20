@@ -10,8 +10,13 @@ response to one of them: read what that author actually argued, showed, or measu
 - Pick a `riff_type`: extend it with his evidence, disagree from his experience, apply their idea to his world,
   tear down their example, or react to their data. A screenshot-commentary card quotes one line of theirs and adds
   his take.
-- WORK NOTES are his evidence, not the starting point: pull a real number, build, or mistake from them to back up the
-  response. A card may come from work notes alone (`riff_type: original`), but at most two per batch.
+- THE TOPIC COMES FROM THE AUDIENCE. Every card's subject must be something the swipe-file authors and their readers
+  already engage with (GTM engineering, AI in revenue teams, outbound, signals, revops, building with agents, careers
+  in GTM). If nobody in the swipe file would care about a topic, it is not a post.
+- WORK NOTES are evidence, never the topic: pull a real number, build, or mistake to back up the response. Niche
+  internal processes in his notes (RFPs, demo-org storage, internal quoting tools, admin cleanup) may appear as a
+  one-line example inside a post about something bigger, never as the subject. A card may come from work notes alone
+  (`riff_type: original`) only if its topic passes the audience test, and at most one per batch.
 - Spread the batch across different authors and posts. Never riff on the same post twice.
 - Spread his evidence too: at most two cards may lean on the same project or build from his work notes.
 
