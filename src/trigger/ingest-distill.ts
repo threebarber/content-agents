@@ -71,7 +71,7 @@ export const ingestDistill = schedules.task({
       }
     }
 
-    const committed = commitState(dir, `ingest: ${written} substack, ${brainNew} brain, ${decayed} decayed (${payload.timestamp.toISOString().slice(0, 10)})`);
+    const committed = commitState(dir, `ingest: ${written} substack, ${brainNew} brain, ${decayed} decayed (${new Date(payload.timestamp).toISOString().slice(0, 10)})`);
     return { written, brainNew, decayed, sources: plan.length, errors, committed };
   },
 });
