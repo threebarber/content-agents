@@ -15,5 +15,15 @@ export const Budget = z.object({
     })
     .prefault({}),
   backfill_days: z.number().int().default(90),
+  social: z
+    .object({
+      linkedin_posts_per_term: z.number().int().default(15),
+      x_tweets_per_term: z.number().int().default(25),
+      x_min_likes: z.number().int().default(15),
+      profile_posts_per_creator: z.number().int().default(8),
+      trial_posts: z.number().int().default(5),
+      max_new_candidates_per_run: z.number().int().default(10),
+    })
+    .prefault({}),
 });
 export type Budget = z.infer<typeof Budget>;

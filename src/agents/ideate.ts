@@ -7,6 +7,18 @@ import { cardBody, cardId, listCards, writeCard, repoUrl, type Card } from "./ca
 import { withDb } from "../lib/duckdb.js";
 import { postCards } from "./slack-cards.js";
 import type { HookRecord } from "../../schemas/hook.js";
+import { readJsonl } from "../lib/jsonl.js";
+import { statePath } from "../lib/paths.js";
+
+type MyPost = { id: string; url: string; published_at: string; at: string; likes: number | null; comments: number | null; shares: number | null; first_line: string | null };
+
+/** Latest snapshot of each of the owner's own LinkedIn posts: what landed, in his real voice. */
+function myPosts(k: number): string {
+  const latest = new Map<string, MyPost>();
+  for (const p of readJsonl<MyPost>(statePath("data", "my-posts.jsonl"))) latest.set(p.id, p);
+  const rows = [...latest.values()].sort((a, b) => b.published_at.localeCompare(a.published_at)).slice(0, k);
+  return rows.map((p) => `- (${p.published_at.slice(0, 10)}) ❤️${p.likes ?? "?"} 💬${p.comments ?? "?"} 🔁${p.shares ?? "?"}  "${p.first_line ?? ""}"`).join("\n");
+}
 
 type BrainRow = { id: string; title: string; text: string; published_at: string; kind: string };
 
@@ -46,7 +58,8 @@ function render(hooks: HookRecord[], notes: BrainRow[], extra: string): string {
   return [
     `LEARNED PREFERENCES\n${readMemory("winning-patterns") || "(none yet — first runs)"}\n\nREJECTED PATTERNS\n${readMemory("rejected") || "(none yet)"}`,
     `ALREADY COVERED OR REJECTED\n${covered()}`,
-    `SWIPE FILE (top posts from the sources he follows, last 3 weeks)\n\n${sw || "(empty)"}`,
+    `HIS RECENT LINKEDIN POSTS (his real voice and what landed; don't repeat these)\n${myPosts(15) || "(none fetched yet)"}`,
+    `SWIPE FILE (top posts from newsletters he follows and from LinkedIn/X searches on his topics, last 3 weeks)\n\n${sw || "(empty)"}`,
     `WORK NOTES (redacted, last 10 days)\n\n${wn || "(none)"}`,
     extra,
   ].join("\n\n=====\n\n");

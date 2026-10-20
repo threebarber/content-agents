@@ -17,6 +17,7 @@ import { ideate } from "./agents/ideate.js";
 import { sweepFeedback } from "./agents/feedback.js";
 import { postCards } from "./agents/slack-cards.js";
 import { listCards } from "./agents/cards.js";
+import { ingestSocial } from "./agents/social.js";
 import { Source } from "../schemas/source.js";
 import { Term } from "../schemas/term.js";
 
@@ -253,6 +254,14 @@ ingest
       n += fresh.length;
     }
     console.error(`${n} new brain items from ${files} files (${dropped} dropped by redaction)`);
+  });
+
+ingest
+  .command("social")
+  .description("LinkedIn + X: term search, creator pulls (Thompson-sampled), and your own post stats")
+  .action(async () => {
+    const r = await ingestSocial(console.error);
+    console.log(JSON.stringify(r));
   });
 
 // ---------- query ----------

@@ -16,10 +16,13 @@ export function readJsonl<T = unknown>(file: string): T[] {
     .map((l) => JSON.parse(l) as T);
 }
 
+/** Strings sliced mid-emoji leave lone surrogates, which DuckDB rejects as malformed JSON. */
+const wellFormed = (_k: string, v: unknown) => (typeof v === "string" ? v.toWellFormed() : v);
+
 export function appendJsonl(file: string, rows: unknown[]): void {
   if (!rows.length) return;
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  fs.appendFileSync(file, rows.map((r) => JSON.stringify(r, wellFormed)).join("\n") + "\n");
 }
 
 /** All item ids already stored for a type (dedup). */

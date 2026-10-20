@@ -18,12 +18,15 @@ export const Item = z.object({
       comments: z.number().nullable().default(null),
       shares: z.number().nullable().default(null), // restacks / reposts
       wordcount: z.number().nullable().default(null),
+      views: z.number().nullable().optional(),
     })
     .prefault({}),
   tags: z.array(z.string()).default([]),
   paywalled: z.boolean().default(false),
   outbound_links: z.array(z.string()).default([]), // candidate-generation input
   fetched_at: z.string(),
+  author_url: z.string().optional(), // profile URL, for turning authors into candidate sources
+  found_via: z.string().optional(), // "term:<id>" when the item came from a search, not a followed source
   saved_by: z.enum(["human"]).optional(),
   note: z.string().optional(),
 });
