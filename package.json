@@ -1,0 +1,37 @@
+{
+  "name": "content-agents",
+  "version": "1.0.0",
+  "description": "Loop-driven content agents: swipe-file distillation, idea generation, and ant-colony source foraging for LinkedIn + Hashnode",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "ca": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "dev": "trigger dev",
+    "deploy": "trigger deploy"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "private": "false",
+  "dependencies": {
+    "@duckdb/node-api": "^1.5.6-r.1",
+    "@langchain/anthropic": "^1.5.12",
+    "@langchain/core": "^1.2.18",
+    "@langchain/langgraph": "^1.5.1",
+    "@trigger.dev/sdk": "^4.7.4",
+    "commander": "^15.0.0",
+    "fast-xml-parser": "^5.11.2",
+    "langsmith": "^0.11.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@trigger.dev/build": "^4.7.4",
+    "@types/node": "^26.6.5",
+    "trigger.dev": "^4.7.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

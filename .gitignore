@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+# private state repo checkout (separate git repo, see PLAN.md §7)
+state/
+state
+# local clone of the brain repo
+.brain-cache/
+.brain-cache
+.trigger/
+*.log
+.DS_Store

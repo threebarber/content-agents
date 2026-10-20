@@ -1,0 +1,13 @@
+# Deny-list for brain content. Pass 1 is literal/regex substitution; pass 2 is a Haiku check (Phase 1).
+# Add customer names, prospect names, internal codenames, people you don't want named.
+replacements:
+  - {pattern: "\\b(AcmeCorp|ExampleCo)\\b", with: "[customer]", flags: "gi"}
+  - {pattern: "\\b[0-9a-zA-Z]{15}(?:[0-9a-zA-Z]{3})?\\b(?=.*(?:quote|org|account|opp|record|id))", with: "[id]", flags: "g"}   # salesforce ids near id-ish words
+  - {pattern: "https?://[^\\s)]*slack\\.com[^\\s)]*", with: "[slack-link]", flags: "g"}
+  - {pattern: "https?://docs\\.google\\.com[^\\s)]*", with: "[gdoc]", flags: "g"}
+  - {pattern: "https?://[^\\s)]*\\.(?:salesforce|force|lightning)\\.com[^\\s)]*", with: "[sf-link]", flags: "g"}
+  - {pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[a-z]{2,}\\b", with: "[email]", flags: "g"}
+  - {pattern: "\\b(?:sk|xox[bp]|ghp|gho|AKfycb)[A-Za-z0-9_-]{10,}\\b", with: "[secret]", flags: "g"}
+drop_if_match:            # pass-1 hard drops: if any of these survive substitution, drop the item
+  - "\\[secret\\]"
+people_allowlist: ["the owner"]   # names that may appear

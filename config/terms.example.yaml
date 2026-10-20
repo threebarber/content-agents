@@ -1,0 +1,19 @@
+# Term registry (schema: schemas/term.ts). Same lifecycle + pheromone as sources.
+# kind: topic | hashtag | x_query | person_query
+# used_for: tagging | x_search | web_search | candidate_relevance
+terms:
+  - {id: term:gtm-engineer,         term: "gtm engineer",           kind: topic, status: active, used_for: [tagging, candidate_relevance, x_search], added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:gtm-engineering,      term: "gtm engineering",        kind: topic, status: active, used_for: [tagging, candidate_relevance, x_search], added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:revops,               term: "revops",                 kind: topic, status: active, used_for: [tagging, candidate_relevance],           added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:outbound,             term: "outbound",               kind: topic, status: active, used_for: [tagging, candidate_relevance],           added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:clay,                 term: "clay",                   kind: topic, status: active, used_for: [tagging, candidate_relevance],           added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:pricing,              term: "pricing",                kind: topic, status: active, used_for: [tagging, candidate_relevance],           added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:cpq-billing,          term: "cpq billing quote-to-cash", kind: topic, status: active, used_for: [tagging, candidate_relevance],        added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:solutions-engineer,   term: "solutions engineer",     kind: topic, status: active, used_for: [tagging, candidate_relevance],           added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:demos,                term: "demo environments",      kind: topic, status: active, used_for: [tagging],                               added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:ai-agents,            term: "ai agents",              kind: topic, status: active, used_for: [tagging, candidate_relevance],           added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:context-engineering,  term: "context engineering",    kind: topic, status: active, used_for: [tagging, candidate_relevance],           added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:build-in-public,      term: "build in public",        kind: topic, status: active, used_for: [tagging],                               added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:claude-code,          term: "claude code",            kind: topic, status: active, used_for: [tagging, candidate_relevance],           added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:personal-knowledge,   term: "personal knowledge system obsidian", kind: topic, status: active, used_for: [tagging],                    added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}
+  - {id: term:q-gtme-newsletter,    term: "gtm engineer newsletter", kind: person_query, status: candidate, used_for: [web_search],                 added_by: human, discovered_via: seed, pheromone: {hits: 0, misses: 0}}

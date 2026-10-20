@@ -1,0 +1,98 @@
+# Source registry — schema: schemas/source.ts (public repo). Edited by humans and by the foraging loop (PLAN.md §4).
+# status: candidate | trial | active | paused | retired
+# discovered_via: seed | link:<item> | mention:<item> | recommendation:<src> | comment:<item> | term:<term> | human
+# method (filled by resolver): substack_api | rss | apify:<actor>
+me:
+  linkedin_profile: null
+  hashnode_rss: null
+sources:
+  - id: substack:99-yash
+    type: substack
+    name: 99% Yash
+    author: Yash Tekriwal
+    url: https://yashtekriwal.substack.com
+    status: active
+    tags: []
+    added_by: human
+    added_at: 2026-10-19
+    discovered_via: seed
+    method: substack_api
+    budget_tier: cheap
+    pheromone:
+      hits: 0
+      misses: 0
+      last_hit_at: null
+      decayed_at: null
+    last_pulled_at: 2026-10-20T00:21:26.103Z
+  - id: substack:andrewchen
+    type: substack
+    name: "@andrewchen"
+    author: Andrew Chen
+    url: https://andrewchen.substack.com
+    status: active
+    tags: []
+    added_by: human
+    added_at: 2026-10-19
+    discovered_via: seed
+    method: substack_api
+    budget_tier: cheap
+    pheromone:
+      hits: 0
+      misses: 0
+      last_hit_at: null
+      decayed_at: null
+    last_pulled_at: 2026-10-20T00:21:26.297Z
+  - id: substack:alex-danco-s-newsletter
+    type: substack
+    name: Alex Danco's Newsletter
+    author: Alex Danco
+    url: https://alexdanco.substack.com
+    status: active
+    tags: []
+    added_by: human
+    added_at: 2026-10-19
+    discovered_via: seed
+    method: substack_api
+    budget_tier: cheap
+    pheromone:
+      hits: 0
+      misses: 0
+      last_hit_at: null
+      decayed_at: null
+    last_pulled_at: 2026-10-20T00:21:26.101Z
+  - id: substack:alexey-guzey
+    type: substack
+    name: Alexey Guzey
+    author: Alexey Guzey
+    url: https://alexeyguzey.substack.com
+    status: active
+    tags: []
+    added_by: human
+    added_at: 2026-10-19
+    discovered_via: seed
+    method: substack_api
+    budget_tier: cheap
+    pheromone:
+      hits: 0
+      misses: 0
+      last_hit_at: null
+      decayed_at: null
+    last_pulled_at: 2026-10-20T00:21:26.102Z
+  - id: substack:astral-codex-ten
+    type: substack
+    name: Astral Codex Ten
+    author: Scott Alexander
+    url: https://astralcodexten.substack.com
+    status: active
+    tags: []
+    added_by: human
+    added_at: 2026-10-19
+    discovered_via: seed
+    method: substack_api
+    budget_tier: cheap
+    pheromone:
+      hits: 0
+      misses: 0
+      last_hit_at: null
+      decayed_at: null
+    last_pulled_at: 2026-10-20T00:21:26.526Z

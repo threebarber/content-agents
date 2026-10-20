@@ -1,0 +1,17 @@
+# Which parts of the brain repo feed the content loop (PLAN.md §6). Human-edited only.
+repo: <owner>/<your-notes-repo>
+include:
+  - {glob: "projects/*.md",        kind: project,  sections: ["*"]}
+  - {glob: "projects/*.log.md",    kind: project_log, sections: ["*"]}
+  - {glob: "daily/*.md",           kind: daily,    sections: ["Capture"]}          # never "Calls"
+  - {glob: "knowledge_base/*.md",  kind: knowledge, sections: ["*"], exclude_files: ["README.md", "pending-intake.md"]}
+  - {glob: "sessions/**/*.md",     kind: session,  sections: ["Discoveries", "Roadblocks", "Accomplished"]}
+  - {glob: "lists/leadership-ideas.md", kind: ideas, sections: ["*"], line_filter: "\\[me\\]"}
+exclude:
+  - "environments/**"
+  - "enriched/**"
+  - "knowledge/deals.md"
+  - "knowledge/people.md"
+  - "lists/people-to-meet.md"
+  - "projects/_template*"
+lookback_days: 7          # daily run: only files changed in this window (git log)

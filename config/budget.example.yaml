@@ -1,0 +1,4 @@
+# Monthly spend caps + per-run item budgets. Human-edited only.
+monthly_usd: {apify: 4, anthropic: 8}
+items_per_run: {substack: 400, linkedin: 300, x: 200}
+backfill_days: 90

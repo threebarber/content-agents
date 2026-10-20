@@ -1,0 +1,24 @@
+# Foraging parameters (PLAN.md §4). Human-edited only; the retro may PROPOSE changes in prompts/proposed-changes.md.
+exploration_share: 0.20          # fraction of each run's item budget spent on candidate/trial sources
+exploration_floor: 0.10          # never below this
+random_slot_per_run: 1           # one uniformly random candidate per run, regardless of prior
+decay_factor_weekly: 0.85        # pheromone evaporation (half-life ~4 weeks)
+hit_rules:
+  engagement_z_min: 1.0          # per-author z-score that counts as a hit
+  hook_quality_min: 4            # 1–5 from distill
+  approved_card_bonus: 2         # extra hits when an approved card cites the item
+trial:
+  items: 5                       # top posts pulled for a candidate
+  pass_hook_quality_mean: 3.5
+  pass_relevance_min: 0.4        # share of trial items matching an active term
+promotion:
+  trial_to_active_hits: 3
+  trial_window_weeks: 3
+  auto_promotions_per_week: 3    # beyond this → proposal in retro
+demotion:
+  active_to_paused_hits_below: 0.5
+  active_to_paused_weeks: 8
+  paused_to_retired_weeks: 12
+caps:
+  active_per_type: {substack: 120, linkedin: 40, x: 20, rss: 40}
+  topic_cluster_max_share: 0.40
