@@ -23,6 +23,7 @@ export const Budget = z.object({
       profile_posts_per_creator: z.number().int().default(8),
       trial_posts: z.number().int().default(5),
       max_new_candidates_per_run: z.number().int().default(10),
+      search_terms: z.number().int().default(12), // total searched terms: pinned + derived
     })
     .prefault({}),
 });

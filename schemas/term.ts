@@ -9,6 +9,7 @@ export const Term = z.object({
   term: z.string(),
   kind: TermKind.default("topic"),
   status: SourceStatus.default("candidate"),
+  pinned: z.boolean().default(false), // human-pinned: always searched, never retired by the weekly re-derive
   used_for: z.array(TermUse).default(["tagging"]),
   added_by: z.string().default("human"),
   added_at: z.string().optional(),

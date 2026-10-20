@@ -170,7 +170,7 @@ sources
 // ---------- terms ----------
 const terms = program.command("terms").description("term registry");
 terms.command("ls").action(() => {
-  for (const t of loadTerms().terms) console.log(`${t.status.padEnd(9)} ${t.kind.padEnd(12)} ${String(t.pheromone.hits).padStart(4)}/${String(t.pheromone.misses).padEnd(4)} ${t.id}  "${t.term}"  [${t.used_for.join(",")}]`);
+  for (const t of loadTerms().terms) console.log(`${t.pinned ? "📌" : "  "} ${t.status.padEnd(9)} ${t.kind.padEnd(12)} ${String(t.pheromone.hits).padStart(4)}/${String(t.pheromone.misses).padEnd(4)} ${t.id}  "${t.term}"  [${t.used_for.join(",")}]`);
 });
 terms
   .command("add <term>")
@@ -188,12 +188,42 @@ terms
   });
 
 terms
+  .command("pin <term>")
+  .description("always search this term on LinkedIn + X; the weekly re-derive never drops it")
+  .option("--no-x", "LinkedIn only")
+  .action((term, o) => {
+    const f = loadTerms();
+    let t = findTerm(f, term);
+    if (!t) {
+      t = Term.parse({ id: `term:${slugify(term)}`, term: term.toLowerCase(), kind: "topic", status: "active", added_by: "human", added_at: today(), discovered_via: "human pin" });
+      f.terms.push(t);
+    }
+    t.pinned = true;
+    t.status = "active";
+    t.used_for = [...new Set([...t.used_for, "tagging", "candidate_relevance", "linkedin_search", ...(o.x ? ["x_search"] : [])])] as typeof t.used_for;
+    saveTerms(f);
+    console.log(`📌 pinned "${t.term}" [${t.used_for.join(",")}]`);
+  });
+
+terms
+  .command("unpin <term>")
+  .description("let the weekly re-derive decide whether to keep searching this term")
+  .action((term) => {
+    const f = loadTerms();
+    const t = findTerm(f, term);
+    if (!t) return fail(`no term ${term}`);
+    t.pinned = false;
+    saveTerms(f);
+    console.log(`unpinned "${t.term}"`);
+  });
+
+terms
   .command("derive")
   .description("derive LinkedIn/X search terms from what the active newsletters write about")
-  .option("-n <n>", "", "12")
+  .option("-n <n>", "total searched terms incl. pinned (default: budget.social.search_terms)")
   .option("--dry", "show proposals without changing terms.yaml")
   .action(async (o) => {
-    const r = await deriveTerms({ n: Number(o.n), dry: o.dry });
+    const r = await deriveTerms({ n: o.n ? Number(o.n) : undefined, dry: o.dry });
     for (const p of r.proposed) console.log(`  ${p.term.padEnd(32)} ${p.why}`);
     if (!o.dry) console.log(`\nadded: ${r.added.join(", ") || "-"}\nkept: ${r.kept.join(", ") || "-"}\nno longer searched: ${r.retired.join(", ") || "-"}`);
     console.log(`$${r.usd.toFixed(4)}`);

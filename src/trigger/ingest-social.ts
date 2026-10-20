@@ -19,7 +19,7 @@ export const ingestSocialTask = schedules.task({
     // keywords follow the newsletters: re-derive the search set weekly from what they write about
     let derived: { added: string[]; retired: string[] } | null = null;
     if (process.env.ANTHROPIC_API_KEY && derivationStale(7)) {
-      derived = await deriveTerms({ n: 12 }).catch((e) => (logger.warn(`derive terms failed: ${e.message}`), null));
+      derived = await deriveTerms({}).catch((e) => (logger.warn(`derive terms failed: ${e.message}`), null));
       if (derived) logger.info("terms derived", derived);
     }
     const social = await ingestSocial((m) => logger.info(m));

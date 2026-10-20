@@ -3,7 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { claude, MODELS, costUsd } from "./llm.js";
 import { loadHooks } from "./distill.js";
-import { loadSources, loadTerms, saveTerms, slugify, today } from "../registry/store.js";
+import { loadSources, loadTerms, saveTerms, loadBudget, slugify, today } from "../registry/store.js";
 import { statePath } from "../lib/paths.js";
 import { Term } from "../../schemas/term.js";
 
@@ -46,6 +46,14 @@ export type DeriveResult = { added: string[]; kept: string[]; retired: string[];
 export async function deriveTerms(opts: { n?: number; dry?: boolean } = {}): Promise<DeriveResult & { proposed: { term: string; why: string }[] }> {
   const topics = topicWeights().slice(0, 80);
   const reg = loadTerms();
+  const pinned = reg.terms.filter((t) => t.pinned);
+  // Stability: a searched term keeps its slot until it has enough results to judge (≥10 posts scored),
+  // and keeps it after that if at least 40% of its posts were strong. Only proven underperformers free a slot.
+  const searched = reg.terms.filter((t) => !t.pinned && t.used_for.some((u) => u.endsWith("_search")));
+  const scored = (t: (typeof searched)[number]) => t.pheromone.hits + t.pheromone.misses;
+  const locked = searched.filter((t) => scored(t) < 10 || t.pheromone.hits / scored(t) >= 0.4);
+  const slots = Math.max(0, (opts.n ?? loadBudget().social.search_terms) - pinned.length - locked.length);
+  if (slots === 0) return { added: [], kept: locked.map((t) => t.term), retired: [], usd: 0, proposed: [] };
   const perf = reg.terms
     .filter((t) => t.used_for.some((u) => u.endsWith("_search")))
     .map((t) => `- "${t.term}": ${t.pheromone.hits.toFixed(0)} strong posts / ${t.pheromone.misses.toFixed(0)} weak`)
@@ -61,11 +69,12 @@ export async function deriveTerms(opts: { n?: number; dry?: boolean } = {}): Pro
 
 ${topics.map((t) => `${t.topic}: ${t.weight.toFixed(1)}, ${t.posts}`).join("\n")}
 
-Turn them into ${opts.n ?? 12} search phrases for finding high-engagement LinkedIn and X posts in this same world. Rules:
+Turn them into ${slots} search phrases for finding high-engagement LinkedIn and X posts in this same world. Rules:
 - Merge near-duplicates ("gtm engineer" / "gtm engineering" can stay as one phrase if they behave the same).
 - Each phrase must be unambiguous on social search. Bare words that mean something else ("clay", "signals", "pipeline") need a qualifier.
 - Prefer phrases practitioners post about (tools, plays, roles, problems) over abstract categories.
 - Skip hiring/career/job-post topics.
+- These are already searched (pinned by the user, or still being tested), so do NOT propose them or near-duplicates of them: ${[...pinned, ...locked].map((t) => `"${t.term}"`).join(", ") || "(none)"}.
 
 How the current search terms performed (strong = on-topic, well-hooked or high-engagement):
 ${perf || "(none yet)"}`,
@@ -73,7 +82,7 @@ ${perf || "(none yet)"}`,
     ],
   });
   const usd = costUsd(MODELS.ideate, res.usage);
-  const proposed = res.parsed_output?.terms ?? [];
+  const proposed = (res.parsed_output?.terms ?? []).slice(0, slots);
   if (opts.dry) return { added: [], kept: [], retired: [], usd, proposed };
 
   const derivedIds = new Set<string>();
@@ -84,6 +93,7 @@ ${perf || "(none yet)"}`,
     derivedIds.add(id);
     const uses = [...(p.linkedin ? ["linkedin_search"] : []), ...(p.x ? ["x_search"] : [])] as ("linkedin_search" | "x_search")[];
     const existing = reg.terms.find((t) => t.id === id || t.term.toLowerCase() === p.term.toLowerCase());
+    if (existing?.pinned) continue;
     if (existing) {
       existing.status = "active";
       existing.used_for = [...new Set([...existing.used_for.filter((u) => !u.endsWith("_search")), "tagging", "candidate_relevance", ...uses])] as typeof existing.used_for;
@@ -95,13 +105,13 @@ ${perf || "(none yet)"}`,
   }
   const retired: string[] = [];
   for (const t of reg.terms) {
-    if (derivedIds.has(t.id) || !t.used_for.some((u) => u.endsWith("_search"))) continue;
+    if (t.pinned || locked.includes(t) || derivedIds.has(t.id) || !t.used_for.some((u) => u.endsWith("_search"))) continue;
     t.used_for = t.used_for.filter((u) => !u.endsWith("_search"));
     retired.push(t.term);
   }
   saveTerms(reg);
   fs.writeFileSync(STATE_FILE(), JSON.stringify({ derived_at: new Date().toISOString(), proposed, added, kept, retired }, null, 2));
-  return { added, kept, retired, usd, proposed };
+  return { added, kept: [...kept, ...locked.map((t) => t.term)], retired, usd, proposed };
 }
 
 /** True when the last derivation is older than `days` (or never ran). */
