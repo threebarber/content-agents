@@ -31,7 +31,7 @@ async function pendingItems(limit: number): Promise<Item[]> {
   const done = new Set(loadHooks().map((h) => h.item_id));
   const active = new Set(loadSources().sources.filter((s) => ["active", "trial", "candidate"].includes(s.status)).map((s) => s.id));
   const items = await withDb(async (q) =>
-    q(`SELECT * FROM items WHERE type IN ('substack','linkedin','x') AND NOT paywalled ORDER BY published_at DESC`),
+    q(`SELECT * FROM items WHERE (type IN ('substack','linkedin','x') OR (type = 'rss' AND source_id NOT LIKE 'web:%')) AND NOT paywalled ORDER BY published_at DESC`),
   );
   return (items as unknown as Item[]).filter((i) => !done.has(i.id) && (active.has(i.source_id) || !!i.found_via)).slice(0, limit);
 }

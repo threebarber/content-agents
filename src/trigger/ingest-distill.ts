@@ -4,6 +4,7 @@ import { loadSources, saveSources, loadForaging, loadBudget } from "../registry/
 import { allocate } from "../registry/thompson.js";
 import { decay } from "../registry/pheromone.js";
 import { pullSubstack } from "../ingest/substack.js";
+import { pullSitemap } from "../ingest/sitemap.js";
 import { writeItems } from "../lib/jsonl.js";
 import { loadBrainConfig, pullBrain } from "../ingest/brain.js";
 import { appendJsonl, existingItemIds } from "../lib/jsonl.js";
@@ -48,6 +49,18 @@ export const ingestDistill = schedules.task({
         logger.info("pulled", { source: a.source.id, lane: a.lane, pulled: items.length, new: n });
       } catch (e) {
         errors.push(`${a.source.id}: ${(e as Error).message}`);
+      }
+    }
+    // newsletters that left Substack: read their sitemap (cheap, few sources, no sampling needed)
+    for (const s of f.sources.filter((x) => x.method === "sitemap" && !["retired", "paused"].includes(x.status))) {
+      try {
+        const items = await pullSitemap(s, { sinceISO: since, max: 10 });
+        const n = writeItems(items);
+        s.last_pulled_at = new Date().toISOString();
+        written += n;
+        logger.info("pulled", { source: s.id, lane: "sitemap", pulled: items.length, new: n });
+      } catch (e) {
+        errors.push(`${s.id}: ${(e as Error).message}`);
       }
     }
     saveSources(f);

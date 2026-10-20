@@ -3,7 +3,7 @@ import { searchLinkedIn, linkedInProfilePosts, searchX, xHandlePosts } from "../
 import { writeItems, appendJsonl } from "../lib/jsonl.js";
 import { statePath } from "../lib/paths.js";
 import { loadSources, saveSources, loadTerms, loadBudget, loadForaging } from "../registry/store.js";
-import { allocate } from "../registry/thompson.js";
+import { sampleBeta } from "../registry/thompson.js";
 import type { Item } from "../../schemas/item.js";
 
 export type SocialStats = { linkedin: number; x: number; mine: number; spend_before: number; skipped?: string; errors: string[] };
@@ -43,18 +43,32 @@ export async function ingestSocial(log: (m: string) => void = () => {}): Promise
   stats.linkedin += (await run("linkedin search", () => searchLinkedIn(liTerms, S.linkedin_posts_per_term))).n;
   stats.x += (await run("x search", () => searchX(xTerms, S.x_tweets_per_term, S.x_min_likes))).n;
 
-  // 2. creators: active get a full pull, candidates/trial get a small trial pull (ant-style allocation)
+  // 2. creators: every active creator gets a full pull; candidates/trial get a trial-size pull, chosen by
+  //    Thompson sampling (most promising first) plus one uniformly random pick, capped per run.
   for (const type of ["linkedin", "x"] as const) {
     const pool = reg.sources.filter((s) => s.type === type && s.url && !["paused", "retired"].includes(s.status));
     if (!pool.length) continue;
-    const alloc = allocate(pool, S.profile_posts_per_creator * Math.max(4, pool.filter((s) => s.status === "active").length), { ...fo, trial: { ...fo.trial, items: S.trial_posts } });
-    const urls = alloc.map((a) => a.source.url!).slice(0, 25);
-    const r = type === "linkedin"
-      ? await run(`linkedin creators (${urls.length})`, () => linkedInProfilePosts(urls, S.profile_posts_per_creator))
-      : await run(`x creators (${urls.length})`, () => xHandlePosts(urls.map((u) => u.split("/").pop()!), S.profile_posts_per_creator));
-    stats[type] += r.n;
-    const now = new Date().toISOString();
-    for (const a of alloc) a.source.last_pulled_at = now;
+    const active = pool.filter((s) => s.status === "active").slice(0, 20);
+    const explore = pool.filter((s) => s.status !== "active").map((s) => ({ s, w: sampleBeta(1 + s.pheromone.hits, 1 + s.pheromone.misses) })).sort((a, b) => b.w - a.w).map((x) => x.s);
+    const trialN = Math.min(explore.length, 8);
+    const picks = explore.slice(0, trialN - 1);
+    const rest = explore.slice(trialN - 1);
+    if (rest.length) picks.push(rest[Math.floor(Math.random() * rest.length)]);
+    const run2 = async (srcs: typeof pool, per: number, label: string) => {
+      if (!srcs.length) return;
+      const urls = srcs.map((s) => s.url!);
+      const r = type === "linkedin"
+        ? await run(`linkedin ${label} (${urls.length})`, () => linkedInProfilePosts(urls, per))
+        : await run(`x ${label} (${urls.length})`, () => xHandlePosts(urls.map((u) => u.split("/").pop()!), per));
+      stats[type] += r.n;
+      const now = new Date().toISOString();
+      for (const s of srcs) {
+        s.last_pulled_at = now;
+        if (s.status === "candidate") s.status = "trial";
+      }
+    };
+    await run2(active, S.profile_posts_per_creator, "creators");
+    await run2(picks, S.trial_posts, "trials");
   }
 
   // 3. the owner's own LinkedIn posts: outcome snapshots (48h / 7d / later all just append; analysis picks the right one)

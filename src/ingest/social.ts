@@ -3,7 +3,9 @@ import type { Item } from "../../schemas/item.js";
 
 const LI_SEARCH = "harvestapi/linkedin-post-search";
 const LI_PROFILE = "harvestapi/linkedin-profile-posts";
-const X_SCRAPER = "apidojo/tweet-scraper";
+// apidojo/tweet-scraper caps runs per month on Apify's free plan (and then silently returns {noResults:true});
+// xquik takes several search terms in one run and has no per-user run cap.
+const X_SCRAPER = "xquik/x-tweet-scraper";
 
 type LiPost = {
   id: string; linkedinUrl: string; content?: string;
@@ -16,7 +18,8 @@ type Tweet = {
   id: string; url: string; text?: string; fullText?: string; createdAt?: string; lang?: string;
   likeCount?: number; replyCount?: number; retweetCount?: number; quoteCount?: number; viewCount?: number; bookmarkCount?: number;
   isReply?: boolean; isRetweet?: boolean;
-  author?: { userName?: string; name?: string; url?: string; followers?: number };
+  author?: { userName?: string; username?: string; name?: string; url?: string; followers?: number };
+  noResults?: boolean;
   entities?: { urls?: { expanded_url?: string }[] };
 };
 
@@ -54,7 +57,8 @@ function xItem(t: Tweet, foundVia?: string, strict = true): Item | null {
   const text = (t.fullText ?? t.text ?? "").trim();
   if (!text || !t.createdAt) return null;
   if (strict && (t.isRetweet || t.isReply || X_SPAM.test(text))) return null;
-  const handle = (t.author?.userName ?? "unknown").toLowerCase();
+  const user = t.author?.userName ?? t.author?.username;
+  const handle = (user ?? "unknown").toLowerCase();
   return {
     id: `x:${t.id}`,
     source_id: `x:${handle}`,
@@ -70,7 +74,7 @@ function xItem(t: Tweet, foundVia?: string, strict = true): Item | null {
     paywalled: false,
     outbound_links: (t.entities?.urls ?? []).map((u) => u.expanded_url).filter((u): u is string => !!u),
     fetched_at: new Date().toISOString(),
-    author_url: `https://x.com/${t.author?.userName ?? handle}`,
+    author_url: `https://x.com/${user ?? handle}`,
     ...(foundVia ? { found_via: foundVia } : {}),
   };
 }
@@ -92,24 +96,39 @@ export async function linkedInProfilePosts(profileUrls: string[], perProfile: nu
   return raw.flatMap((p) => (p.type && p.type !== "post" ? [] : liItem(p) ?? []));
 }
 
+/** Apify actors report failures (run caps, blocks) as a single {noResults:true} item: surface that as an error. */
+function assertResults<T extends { noResults?: boolean }>(raw: T[], label: string): T[] {
+  if (raw.length && raw.every((r) => r.noResults)) throw new Error(`${label}: actor returned noResults (run limit or block?)`);
+  return raw.filter((r) => !r.noResults);
+}
+
+/** All terms in one run; the date and likes filters live in the query itself. Each tweet is credited to the term it matches. */
 export async function searchX(terms: { id: string; term: string }[], perTerm: number, minLikes: number, sinceDays = 14): Promise<Item[]> {
-  const out: Item[] = [];
-  const start = new Date(Date.now() - sinceDays * 86400000).toISOString().slice(0, 10);
-  for (const t of terms) {
-    const raw = await runActor<Tweet>(X_SCRAPER, { searchTerms: [t.term], maxItems: perTerm, sort: "Top", tweetLanguage: "en", minimumFavorites: minLikes, start });
-    for (const tw of raw) {
-      const it = xItem(tw, `term:${t.id}`);
-      if (it) out.push(it);
-    }
-  }
-  return out;
+  if (!terms.length) return [];
+  const since = new Date(Date.now() - sinceDays * 86400000).toISOString().slice(0, 10);
+  const raw = assertResults(
+    await runActor<Tweet>(X_SCRAPER, {
+      searchTerms: terms.map((t) => `${t.term} min_faves:${minLikes} lang:en -filter:replies since:${since}`),
+      maxItems: perTerm * terms.length,
+      maxItemsPerTarget: perTerm,
+      queryType: "Top",
+    }),
+    "x search",
+  );
+  const words = terms.map((t) => ({ ...t, words: t.term.toLowerCase().split(/\s+/) }));
+  return raw.flatMap((tw) => {
+    const text = (tw.fullText ?? tw.text ?? "").toLowerCase();
+    const match = words.find((t) => t.words.every((w) => text.includes(w))) ?? words.find((t) => t.words.some((w) => text.includes(w)));
+    const it = xItem(tw, match ? `term:${match.id}` : undefined);
+    return it ? [it] : [];
+  });
 }
 
 export async function xHandlePosts(handles: string[], perHandle: number, sinceDays = 14): Promise<Item[]> {
   if (!handles.length) return [];
-  const start = new Date(Date.now() - sinceDays * 86400000).toISOString().slice(0, 10);
-  const raw = await runActor<Tweet>(X_SCRAPER, { twitterHandles: handles, maxItems: perHandle * handles.length, sort: "Latest", start });
-  return raw.flatMap((t) => xItem(t) ?? []);
+  const since = Date.now() - sinceDays * 86400000;
+  const raw = assertResults(await runActor<Tweet>(X_SCRAPER, { twitterHandles: handles, maxItems: perHandle * handles.length, maxItemsPerTarget: perHandle, queryType: "Latest" }), "x creators");
+  return raw.flatMap((t) => (t.createdAt && new Date(t.createdAt).getTime() >= since ? xItem(t) ?? [] : []));
 }
 
 /** A single LinkedIn post by URL (the profile-posts actor accepts post URLs). */
@@ -120,6 +139,7 @@ export async function linkedInPostByUrl(url: string): Promise<Item | null> {
 
 /** A single tweet by URL. */
 export async function xPostByUrl(url: string): Promise<Item | null> {
-  const raw = await runActor<Tweet>(X_SCRAPER, { startUrls: [url], maxItems: 1 });
+  const id = url.match(/status\/(\d+)/)?.[1];
+  const raw = await runActor<Tweet>(X_SCRAPER, id ? { tweetIds: [id], maxItems: 1 } : { startUrls: [url], maxItems: 1 });
   return raw[0] ? xItem(raw[0], undefined, false) : null; // explicitly saved: skip the spam/reply filters
 }
