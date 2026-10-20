@@ -1,5 +1,5 @@
 import { schedules, logger } from "@trigger.dev/sdk";
-import { checkoutState, commitState } from "../lib/state-repo.js";
+import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
 import { loadSources, saveSources, loadForaging, loadBudget } from "../registry/store.js";
 import { allocate } from "../registry/thompson.js";
 import { decay } from "../registry/pheromone.js";
@@ -19,9 +19,9 @@ export const ingestDistill = schedules.task({
   machine: "small-1x",
   maxDuration: 1500,
   run: async (payload) => {
-    if (!process.env.GITHUB_TOKEN && !process.env.STATE_DIR) {
-      logger.warn("GITHUB_TOKEN not set — cannot clone STATE_REPO; skipping run. Add it in Trigger.dev → Environment variables.");
-      return { skipped: "missing GITHUB_TOKEN" };
+    if (!stateToken() && !process.env.STATE_DIR) {
+      logger.warn("STATE_GITHUB_TOKEN not set — cannot clone STATE_REPO; skipping run. Add it in Trigger.dev → Environment variables.");
+      return { skipped: "missing STATE_GITHUB_TOKEN" };
     }
     const dir = checkoutState();
     logger.info("state checkout", { dir, scheduled: payload.timestamp });
@@ -43,6 +43,7 @@ export const ingestDistill = schedules.task({
         const n = writeItems(items);
         a.source.last_pulled_at = new Date().toISOString();
         written += n;
+        await new Promise((r) => setTimeout(r, 400)); // be polite to Substack
         logger.info("pulled", { source: a.source.id, lane: a.lane, pulled: items.length, new: n });
       } catch (e) {
         errors.push(`${a.source.id}: ${(e as Error).message}`);

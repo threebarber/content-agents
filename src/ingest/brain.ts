@@ -34,7 +34,7 @@ export function loadBrainConfig(): BrainConfig {
  * has to be a second token, not a second scope on the state token.
  */
 export function syncBrain(repo: string, dir = path.join(codeDir(), ".brain-cache")): string {
-  const token = process.env.BRAIN_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
+  const token = process.env.BRAIN_GITHUB_TOKEN || process.env.STATE_GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   const url = token ? `https://x-access-token:${token}@github.com/${repo}.git` : `https://github.com/${repo}.git`;
   if (fs.existsSync(path.join(dir, ".git"))) {
     execFileSync("git", ["-C", dir, "fetch", "--depth", "1", "origin"], { stdio: "ignore" });

@@ -1,7 +1,7 @@
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36 content-agents/0.1";
 
-export async function getJson<T = unknown>(url: string, init: RequestInit = {}, tries = 3): Promise<T> {
+export async function getJson<T = unknown>(url: string, init: RequestInit = {}, tries = 4): Promise<T> {
   let lastErr: unknown;
   for (let i = 0; i < tries; i++) {
     try {
@@ -19,7 +19,9 @@ export async function getJson<T = unknown>(url: string, init: RequestInit = {}, 
     } catch (e) {
       lastErr = e;
       if (e instanceof HttpError && e.status < 500 && e.status !== 429) throw e;
-      await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+      // 429s need real backoff (Substack rate-limits shared egress IPs): 2s, 4s, 8s + jitter
+      const rateLimited = e instanceof Error && e.message.includes("429");
+      await new Promise((r) => setTimeout(r, (rateLimited ? 2000 * 2 ** i : 500 * (i + 1)) + Math.random() * 500));
     }
   }
   throw lastErr;

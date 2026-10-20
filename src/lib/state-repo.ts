@@ -13,8 +13,8 @@ export function checkoutState(): string {
   const local = process.env.STATE_DIR;
   if (local && fs.existsSync(path.join(local, ".git")) && !process.env.FORCE_STATE_CLONE) return path.resolve(local);
   if (!repo) throw new Error("STATE_REPO not set and no local STATE_DIR checkout");
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) throw new Error("GITHUB_TOKEN required to clone STATE_REPO");
+  const token = stateToken();
+  if (!token) throw new Error("STATE_GITHUB_TOKEN required to clone STATE_REPO");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-state-"));
   execFileSync("git", ["clone", "--depth", "1", "--quiet", `https://x-access-token:${token}@github.com/${repo}.git`, dir], { stdio: "ignore" });
   process.env.STATE_DIR = dir;
@@ -27,7 +27,7 @@ export function commitState(dir: string, message: string): boolean {
   const status = run(["status", "--porcelain"]).trim();
   if (!status) return false;
   run(["-c", "user.name=content-agents", "-c", "user.email=content-agents@users.noreply.github.com", "commit", "-q", "-m", message]);
-  if (process.env.STATE_REPO && process.env.GITHUB_TOKEN) {
+  if (process.env.STATE_REPO && stateToken()) {
     // rebase-safe push: pull first in case another task committed
     try {
       run(["pull", "--rebase", "-q"]);
@@ -35,4 +35,9 @@ export function commitState(dir: string, message: string): boolean {
     run(["push", "-q"]);
   }
   return true;
+}
+
+/** Trigger.dev drops env vars named GITHUB_TOKEN on sync, so the state token is STATE_GITHUB_TOKEN (GITHUB_TOKEN still works locally). */
+export function stateToken(): string | undefined {
+  return process.env.STATE_GITHUB_TOKEN || process.env.GITHUB_TOKEN || undefined;
 }
