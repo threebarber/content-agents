@@ -91,8 +91,10 @@ export async function retro(opts: { days?: number; post?: boolean } = {}): Promi
   ].join("\n\n=====\n\n");
   const r = await callRetro({ system: prompt("retro"), user });
 
-  fs.writeFileSync(statePath("memory", "winning-patterns.md"), `# What works\n\n_Updated by the retro on ${new Date().toISOString().slice(0, 10)}._\n\n${r.winning_patterns.trim()}\n`);
-  fs.writeFileSync(statePath("memory", "rejected.md"), `# What to avoid\n\n_Updated by the retro on ${new Date().toISOString().slice(0, 10)}._\n\n${r.rejected_patterns.trim()}\n`);
+  // the model sometimes echoes the file's heading/italic stamp; keep only the bullets
+  const clean = (t: string) => t.split("\n").filter((l) => !/^#\s|^_.*_$/.test(l.trim())).join("\n").trim();
+  fs.writeFileSync(statePath("memory", "winning-patterns.md"), `# What works\n\n_Updated by the retro on ${new Date().toISOString().slice(0, 10)}._\n\n${clean(r.winning_patterns)}\n`);
+  fs.writeFileSync(statePath("memory", "rejected.md"), `# What to avoid\n\n_Updated by the retro on ${new Date().toISOString().slice(0, 10)}._\n\n${clean(r.rejected_patterns)}\n`);
   const covered = ["drafted", "published"].flatMap((q) => listCards(q as "drafted").map((c) => `- ${parseBody(c.body).title}`));
   fs.writeFileSync(statePath("memory", "topics-covered.md"), `# Topics already drafted or published\n\n${covered.join("\n") || "_none yet_"}\n`);
 
