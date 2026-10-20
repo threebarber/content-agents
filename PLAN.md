@@ -28,7 +28,7 @@ negative results).
 | 3 | **Runs on Trigger.dev** (free: $5/mo compute, 10 schedules, ≥1 hr cadence, webhooks). TypeScript: Trigger.dev SDK + LangGraph.js + LangSmith JS. Side trials: LangSmith Fleet for the retro agent; Trigger.dev `chat.agent` for "talk to my swipe file." |
 | 4 | **No automated publishing.** Hashnode API is Pro-only since 2026-05-13 and I want to write myself. Outcome measurement is LinkedIn-only (Apify on my own profile). |
 | 5 | **Voice from Hashnode RSS**, pulled once; approved drafts extend it. |
-| 6 | **Slack: my personal workspace** (`jbyaa`), a bot app `content-agents` (manifest in `slack-app/`, managed with the Slack CLI) posting to `#content-agents`. Fully separate from notes-repo. |
+| 6 | **Slack: my personal workspace** , a bot app `content-agents` (manifest in `slack-app/`, managed with the Slack CLI) posting to `#content-agents`. Fully separate from the work-notes repo. |
 | 7 | **`rewrite` verdicts re-run immediately.** Trigger.dev's inbound webhooks are private beta (requested), so until then: a GitHub Action on the state repo calls the Trigger.dev API on push (`feedback-webhook`), and a ~40-line Cloudflare Worker relays Slack events for intake. Both free. The hourly sweep stays as the safety net. |
 | 8 | **Manual intake is a first-class input.** A post link (with an optional note) dropped in a Slack channel or `queue/saved/` is fetched, distilled, credited to its author as the strongest possible signal, and riffed on immediately (§5b). A publication/profile link becomes a candidate source with an immediate trial. |
 | 9 | **Two repos.** `content-agents` (public: code, prompts, schemas, example config, docs) and a private state repo (my sources, terms, redact list, queue, data, memory). Tasks clone both; repo names come from env vars. |
@@ -159,7 +159,7 @@ layers, kept outside the self-improving loop. The retro can *propose* changes to
  SOURCES (registry, §3)                TRIGGER.DEV (free)                                    ME
  ────────────────────────────          ────────────────────────────────────────────          ───────────────
  Substack API      daily  ──►  ingest (Thompson-sampled) ──► distill (Haiku) ──┐
- notes-repo      daily  ──►  ingest + redact                                 ├─► ideate (Sonnet) ─► queue/inbox/*.md ─► verdict 👍👎✍️
+ the work-notes repo      daily  ──►  ingest + redact                                 ├─► ideate (Sonnet) ─► queue/inbox/*.md ─► verdict 👍👎✍️
  LinkedIn (Apify)  weekly ──►  ingest + candidates                             │     Sun + Wed                                 │ commit
  my LinkedIn       weekly ──►  measure ───────────────────────────────────────►┘                                               ▼
                                    ▲                                              draft (Sonnet) ◄── feedback ◄── GitHub push webhook
@@ -220,7 +220,7 @@ That's the screenshot-commentary format.
 
 ---
 
-## 6. Mining notes-repo safely
+## 6. Mining the work-notes repo safely
 
 - **In:** `projects/*.md`, `projects/*.log.md`, `daily/*.md` → `## Capture` only,
   `knowledge_base/*.md`, `sessions/**/*.md` → `## Discoveries` + `## Roadblocks`,
@@ -230,7 +230,7 @@ That's the screenshot-commentary format.
 - Redaction two-pass: deny-list substitution (`[customer]`, `[id]`, `[link]`), then a Haiku
   check that flags anything still reading as a specific deal or person → dropped, not fixed.
 - Brain-derived items live **only in the private state repo**. Ideas are framed as patterns
-  and builds, never deals. Read with a fine-grained GitHub token, read-only on notes-repo.
+  and builds, never deals. Read with a fine-grained GitHub token, read-only on the work-notes repo.
 
 ---
 
@@ -265,7 +265,7 @@ That's the screenshot-commentary format.
 ```
 
 Secrets (Trigger.dev env vars): `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, `LANGSMITH_API_KEY`,
-`GITHUB_TOKEN` (state repo rw, notes-repo ro), `SLACK_WEBHOOK_URL`, `STATE_REPO`,
+`GITHUB_TOKEN` (state repo rw, the work-notes repo ro), `SLACK_WEBHOOK_URL`, `STATE_REPO`,
 `BRAIN_REPO`, `GITHUB_WEBHOOK_SECRET`, `SLACK_SIGNING_SECRET` (intake app).
 
 ---
@@ -337,4 +337,4 @@ month-to-date usage via API and skips paid pulls past $4. Trigger.dev billing li
   `/recommendations`; `/api/v1/publication/search` (empty unauthenticated)
 - Hashnode, "GraphQL API" announcement (2026-05-13)
 - Trigger.dev pricing; docs: scheduled tasks, free-plan minimum window, limits, webhooks, pythonExtension, billing limits
-- notes-repo README, `claude/nightly-prompt.md`, `claude/routine-bootstraps.md`, sample files
+- the work-notes repo README, `claude/nightly-prompt.md`, `claude/routine-bootstraps.md`, sample files

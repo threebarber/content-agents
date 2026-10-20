@@ -39,7 +39,7 @@ export const cardVerdict = task({
     if (p.slack) card.meta.slack = p.slack;
     writeCard("inbox", card.meta, card.body);
     const r = await sweepFeedback((m) => logger.info(m));
-    const committed = commitState(dir, `verdict: ${p.verdict} ${p.cardId}${p.user ? ` (via Slack, ${p.user})` : ""}`);
+    const committed = commitState(dir, `verdict: ${p.verdict} ${p.cardId} (via Slack)`);
     return { ...r, committed };
   },
 });

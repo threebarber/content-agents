@@ -27,6 +27,18 @@ export function claude(): Anthropic {
  * (state/prompts/rules/<name>.md). A full private override (state/prompts/overrides/<name>.md) still wins if present.
  */
 export function prompt(name: string): string {
+  return fillOwner(rawPrompt(name));
+}
+
+/** How prompts refer to the person this system writes for. Private: state/config/persona.yaml `name:` (default "the author"). */
+export function ownerName(): string {
+  const f = statePath("config", "persona.yaml");
+  const m = fs.existsSync(f) ? fs.readFileSync(f, "utf8").match(/^name:\s*["']?([^"'\n]+)/m) : null;
+  return m?.[1]?.trim() || "the author";
+}
+const fillOwner = (s: string) => s.replace(/\{\{owner\}\}/g, ownerName());
+
+function rawPrompt(name: string): string {
   const override = statePath("prompts", "overrides", `${name}.md`);
   if (fs.existsSync(override)) return fs.readFileSync(override, "utf8");
   const base = fs.readFileSync(path.join(codeDir(), "prompts", `${name}.md`), "utf8");

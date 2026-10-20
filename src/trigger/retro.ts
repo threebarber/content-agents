@@ -26,6 +26,6 @@ export const applyProposal = task({
     if (!stateToken()) throw new Error("missing STATE_GITHUB_TOKEN");
     const dir = checkoutState();
     const line = await decideProposal(p.proposalId, p.decision);
-    return { line, committed: commitState(dir, `proposal ${p.decision}: ${p.proposalId}${p.user ? ` (${p.user})` : ""}`) };
+    return { line, committed: commitState(dir, `proposal ${p.decision}: ${p.proposalId}`) };
   },
 });

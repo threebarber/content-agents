@@ -10,4 +10,4 @@ replacements:
   - {pattern: "\\b(?:sk|xox[bp]|ghp|gho|AKfycb)[A-Za-z0-9_-]{10,}\\b", with: "[secret]", flags: "g"}
 drop_if_match:            # pass-1 hard drops: if any of these survive substitution, drop the item
   - "\\[secret\\]"
-people_allowlist: ["the owner"]   # names that may appear
+people_allowlist: ["<your first name>"]   # names that may appear

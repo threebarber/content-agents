@@ -15,7 +15,7 @@ import { statePath } from "../lib/paths.js";
 
 type MyPost = { id: string; url: string; published_at: string; at: string; likes: number | null; comments: number | null; shares: number | null; first_line: string | null };
 
-/** Latest snapshot of each of the owner's own LinkedIn posts: what landed, in his real voice. */
+/** Latest snapshot of each of the owner's own LinkedIn posts: what landed, in their real voice. */
 function myPosts(k: number): string {
   const latest = new Map<string, MyPost>();
   for (const p of readJsonl<MyPost>(statePath("data", "my-posts.jsonl"))) latest.set(p.id, p);
@@ -243,7 +243,7 @@ export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean }
 export async function ideateOne(prev: Card): Promise<IdeateResult> {
   const hooks = swipeFile(21, 30);
   const notes = await workNotes(14, 15);
-  const extra = `REWRITE REQUEST\nThe owner marked this card "rewrite" — good idea, wrong angle. His note: "${prev.meta.why || "(no note)"}".\nOriginal card:\n${prev.body}\n\nWrite one replacement card that keeps what was good and follows his note.`;
+  const extra = `REWRITE REQUEST\nThe owner marked this card "rewrite" — good idea, wrong angle. Their note: "${prev.meta.why || "(no note)"}".\nOriginal card:\n${prev.body}\n\nWrite one replacement card that keeps what was good and follows their note.`;
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: 1 });
   const c = cards[0];
   const file = writeCard("inbox", toMeta(c, hooks, run_id, `rewrite:${prev.meta.id}`), cardBody(c));
@@ -252,12 +252,12 @@ export async function ideateOne(prev: Card): Promise<IdeateResult> {
 }
 
 
-/** Riff on posts the owner dropped into Slack (links or screenshots), steered by his note. */
+/** Riff on posts the owner dropped into Slack (links or screenshots), steered by their note. */
 export async function ideateFromSaved(items: { id: string; author: string | null; title: string | null; text: string; metrics: { likes: number | null; comments: number | null } }[], note: string, thread?: { channel: string; ts: string }): Promise<IdeateResult> {
   const hooks = swipeFile(21, 20);
   const notes = await workNotes(14, 15);
   const saved = items.map((i) => `[${i.id}] ${i.author ?? "?"} (❤️${i.metrics.likes ?? "?"} 💬${i.metrics.comments ?? "?"})\n${i.text.slice(0, 3000)}`).join("\n\n");
-  const extra = `THE OWNER SAVED THIS FOR YOU\nHe dropped these post(s) into Slack because they caught his eye${note ? `, with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${items.length > 1 ? 3 : 2} cards that riff on what he saved, connected to his own work where it fits. One may be a screenshot-commentary card (quote the post, add his take). Cite the saved item ids in evidence.`;
+  const extra = `THE OWNER SAVED THIS FOR YOU\nThey dropped these post(s) into Slack because they caught their eye${note ? `, with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${items.length > 1 ? 3 : 2} cards that riff on what he saved, connected to his own work where it fits. One may be a screenshot-commentary card (quote the post, add his take). Cite the saved item ids in evidence.`;
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: items.length > 1 ? 3 : 2 });
   const files = cards.map((c) => {
     const meta = toMeta(c, hooks, run_id, `saved:${items[0]?.id}`);
@@ -274,7 +274,7 @@ export async function ideateAnotherAngle(prev: Card): Promise<IdeateResult> {
   const riff = prev.meta.riff_on;
   const pool = riff && !hooks.some((h) => h.item_id === riff) ? [...loadHooks().filter((h) => h.item_id === riff), ...hooks] : hooks;
   const notes = await workNotes(14, 15);
-  const extra = `ANOTHER ANGLE REQUEST\nThe owner rejected this idea but rated the post it riffed on as good. His note on the idea: "${prev.meta.why || "(none)"}".\nRejected card:\n${prev.body.split("\n---\n")[0]}\n\nWrite ONE new card that riffs on the same post (riff_on: ${riff ?? "the same post"}) with a different riff_type, a different angle, and a different hook move. Don't reuse the rejected idea's framing.`;
+  const extra = `ANOTHER ANGLE REQUEST\nThe owner rejected this idea but rated the post it riffed on as good. Their note on the idea: "${prev.meta.why || "(none)"}".\nRejected card:\n${prev.body.split("\n---\n")[0]}\n\nWrite ONE new card that riffs on the same post (riff_on: ${riff ?? "the same post"}) with a different riff_type, a different angle, and a different hook move. Don't reuse the rejected idea's framing.`;
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(pool, notes, extra), n: 1 });
   const c = cards[0];
   if (riff) c.riff_on = riff;

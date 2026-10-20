@@ -44,6 +44,6 @@ export const slashCommand = task({
       reply = `Failed: ${(e as Error).message.slice(0, 300)}`;
     }
     await fetch(p.response_url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ response_type: "ephemeral", replace_original: true, text: reply }) });
-    return { reply, committed: commitState(dir, `/ca ${p.text}${p.user ? ` (${p.user})` : ""}`) };
+    return { reply, committed: commitState(dir, `/ca ${p.text}`) };
   },
 });
