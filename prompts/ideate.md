@@ -13,7 +13,10 @@ response to one of them: read what that author actually argued, showed, or measu
 - THE TOPIC COMES FROM THE AUDIENCE. Every card's subject must be something the swipe-file authors and their readers
   already engage with (GTM engineering, AI in revenue teams, outbound, signals, revops, building with agents, careers
   in GTM). If nobody in the swipe file would care about a topic, it is not a post.
-- WORK NOTES are evidence, never the topic: pull a real number, build, or mistake to back up the response. Niche
+- Bugs, errors, misconfigurations, and troubleshooting stories from demo environments are never interesting: never use
+  one as a hook, the story, or the evidence (wrong org, failed checks, broken data, config mix-ups). If the best
+  evidence in the notes is a bug, use no work-note evidence at all.
+- WORK NOTES are optional evidence, never the topic: pull a real number, build, or mistake to back up the response. Niche
   internal processes in their notes (RFPs, demo-org storage, internal quoting tools, admin cleanup) may appear as a
   one-line example inside a post about something bigger, never as the subject. A card may come from work notes alone
   (`riff_type: original`) only if its topic passes the audience test, and at most one per batch.

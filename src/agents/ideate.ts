@@ -51,8 +51,14 @@ async function workNotes(days: number, k: number, perProject = 2): Promise<Brain
   const since = new Date(Date.now() - days * 86400000).toISOString();
   const rows = (await withDb((q) =>
     q(`SELECT id, title, text, published_at::VARCHAR AS published_at, tags[1] AS kind FROM items
-       WHERE source_id = 'brain' AND published_at >= '${since}' AND tags[1] IN ('session','daily','project','ideas','knowledge')
-       AND length(text) > 200 ORDER BY published_at DESC`),
+       WHERE source_id = 'brain' AND published_at >= '${since}' AND length(text) > 200
+       -- what was built, decided, or thought; never bug notes (roadblocks, discoveries, knowledge-base gotchas)
+       AND (
+         (tags[1] = 'session' AND split_part(id, '#', 2) = 'accomplished')
+         OR (tags[1] = 'project' AND split_part(id, '#', 2) IN ('top', 'key-decisions', 'open-questions'))
+         OR tags[1] IN ('daily', 'ideas')
+       )
+       ORDER BY published_at DESC`),
   )) as unknown as BrainRow[];
   const byProject = new Map<string, BrainRow[]>();
   for (const r of rows) {
@@ -114,7 +120,7 @@ function render(hooks: HookRecord[], notes: BrainRow[], extra: string): string {
     `NEVER THE TOPIC (may appear only as a one-line supporting example)\n${avoidTopics().map((t) => `- /${t.pattern}/ — ${t.why}`).join("\n") || "(none)"}`,
     `HIS RECENT LINKEDIN POSTS (his real voice and what landed; don't repeat these)\n${myPosts(15) || "(none fetched yet)"}`,
     `SWIPE FILE (top posts from newsletters he follows and from LinkedIn/X searches on his topics, last 3 weeks)\n\n${sw || "(empty)"}`,
-    `WORK NOTES (redacted, last 30 days, spread across projects — evidence, not topics)\n\n${wn || "(none)"}`,
+    `WORK NOTES (redacted, last 30 days: what was built, decided, or thought — optional evidence, never the topic)\n\n${wn || "(none)"}`,
     extra,
   ].join("\n\n=====\n\n");
 }
