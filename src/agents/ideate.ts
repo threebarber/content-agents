@@ -213,3 +213,18 @@ export async function ideateFromSaved(items: { id: string; author: string | null
   if (process.env.SLACK_BOT_TOKEN) await postCards(files, `*${files.length} ideas from what you saved*`, thread);
   return { files, usd, runId: run_id };
 }
+
+/** the owner rejected the idea but liked the post: write one card with a genuinely different angle on the same post. */
+export async function ideateAnotherAngle(prev: Card): Promise<IdeateResult> {
+  const hooks = swipeFile(30, 45);
+  const riff = prev.meta.riff_on;
+  const pool = riff && !hooks.some((h) => h.item_id === riff) ? [...loadHooks().filter((h) => h.item_id === riff), ...hooks] : hooks;
+  const notes = await workNotes(14, 15);
+  const extra = `ANOTHER ANGLE REQUEST\nThe owner rejected this idea but rated the post it riffed on as good. His note on the idea: "${prev.meta.why || "(none)"}".\nRejected card:\n${prev.body.split("\n---\n")[0]}\n\nWrite ONE new card that riffs on the same post (riff_on: ${riff ?? "the same post"}) with a different riff_type, a different angle, and a different hook move. Don't reuse the rejected idea's framing.`;
+  const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(pool, notes, extra), n: 1 });
+  const c = cards[0];
+  if (riff) c.riff_on = riff;
+  const file = writeCard("inbox", toMeta(c, pool, run_id, `angle:${prev.meta.id}`), cardBody(c));
+  if (process.env.SLACK_BOT_TOKEN) await postCards([file], "*Another angle on the same post*", prev.meta.slack);
+  return { files: [file], usd, runId: run_id };
+}

@@ -10,6 +10,8 @@ export type CardVerdictPayload = {
   cardId: string;
   verdict: "approve" | "reject" | "rewrite";
   why?: string;
+  sourceRating?: "good" | "bad" | "neutral";
+  anotherAngle?: boolean;
   user?: string;
   slack?: { channel: string; ts: string };
 };
@@ -30,6 +32,10 @@ export const cardVerdict = task({
     }
     card.meta.verdict = p.verdict;
     card.meta.why = (p.why ?? "").trim();
+    if (p.verdict === "reject") {
+      card.meta.source_rating = p.sourceRating ?? "neutral";
+      card.meta.another_angle = !!p.anotherAngle;
+    }
     if (p.slack) card.meta.slack = p.slack;
     writeCard("inbox", card.meta, card.body);
     const r = await sweepFeedback((m) => logger.info(m));

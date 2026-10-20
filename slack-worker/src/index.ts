@@ -74,6 +74,32 @@ function modal(meta: Meta, title: string) {
           placeholder: { type: "plain_text", text: rewrite ? "e.g. less negative, lead with the number, make it a how-to" : "e.g. too inside-baseball, not my voice, done to death" },
         },
       },
+      // reject only: judge the source post separately from the idea
+      ...(rewrite ? [] : [
+        {
+          type: "input",
+          block_id: "source",
+          optional: true,
+          label: { type: "plain_text", text: "The post it riffed on was…" },
+          element: {
+            type: "radio_buttons",
+            action_id: "rating",
+            initial_option: { text: { type: "plain_text", text: "No opinion" }, value: "neutral" },
+            options: [
+              { text: { type: "plain_text", text: "Good post, bad idea" }, value: "good" },
+              { text: { type: "plain_text", text: "Not worth riffing on" }, value: "bad" },
+              { text: { type: "plain_text", text: "No opinion" }, value: "neutral" },
+            ],
+          },
+        },
+        {
+          type: "input",
+          block_id: "angle",
+          optional: true,
+          label: { type: "plain_text", text: "Want a different idea from the same post?" },
+          element: { type: "checkboxes", action_id: "another", options: [{ text: { type: "plain_text", text: "Try another angle from this post" }, value: "yes" }] },
+        },
+      ]),
     ],
   };
 }
@@ -159,12 +185,15 @@ export default {
 
     if (payload.type === "view_submission" && payload.view?.callback_id === "card_verdict") {
       const meta: Meta = JSON.parse(payload.view.private_metadata);
-      const why: string = payload.view.state?.values?.why?.text?.value ?? "";
+      const v = payload.view.state?.values ?? {};
+      const why: string = v.why?.text?.value ?? "";
+      const sourceRating: string = v.source?.rating?.selected_option?.value ?? "neutral";
+      const anotherAngle = (v.angle?.another?.selected_options ?? []).length > 0;
       const hist = await slack(env, "conversations.history", { channel: meta.channel, latest: meta.ts, inclusive: true, limit: 1 });
       const blocks = hist?.messages?.[0]?.blocks ?? [];
-      const line = meta.verdict === "rewrite" ? `⏳ Rewriting… “${why}”` : `⏳ Rejecting…${why ? ` “${why}”` : ""}`;
+      const line = meta.verdict === "rewrite" ? `⏳ Rewriting… “${why}”` : `⏳ Rejecting…${why ? ` “${why}”` : ""}${anotherAngle ? " · another angle coming" : ""}`;
       await slack(env, "chat.update", { channel: meta.channel, ts: meta.ts, text: line, blocks: pending(blocks, line) });
-      await trigger(env, { cardId: meta.cardId, verdict: meta.verdict, why, slack: { channel: meta.channel, ts: meta.ts }, user: payload.user?.username });
+      await trigger(env, { cardId: meta.cardId, verdict: meta.verdict, why, sourceRating, anotherAngle, slack: { channel: meta.channel, ts: meta.ts }, user: payload.user?.username });
       return Response.json({ response_action: "clear" });
     }
 

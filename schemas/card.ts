@@ -45,4 +45,6 @@ export type CardMeta = {
   riff_on?: string | null;
   riff_type?: string;
   their_point?: string | null;
+  source_rating?: "good" | "bad" | "neutral";
+  another_angle?: boolean;
 };

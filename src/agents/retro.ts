@@ -29,7 +29,7 @@ export function saveProposals(p: Proposal[]): void {
   fs.writeFileSync(PROPOSALS(), JSON.stringify(p, null, 2));
 }
 
-type Fb = { card: string; verdict: string; why: string; sources: string[]; at: string };
+type Fb = { card: string; verdict: string; why: string; sources: string[]; at: string; riff_on?: string | null; source_rating?: string | null };
 
 /** Deterministic foraging proposals: promote candidates that keep producing, retire ones that don't, pause quiet actives. */
 function sourceProposals(): Proposal[] {
@@ -76,7 +76,8 @@ export async function retro(opts: { days?: number; post?: boolean } = {}): Promi
     .map((f) => {
       const c = cards.get(f.card);
       const b = c ? parseBody(c.body) : null;
-      return `- ${f.verdict.toUpperCase()}${f.why ? ` ("${f.why}")` : ""}: ${b?.title ?? f.card}\n    hook: ${b?.hook ?? ""}\n    format: ${c?.meta.format ?? "?"} · ${c?.meta.platform ?? "?"} · grounded in work notes: ${(c?.meta.brain_refs?.length ?? 0) > 0}`;
+      const src = f.verdict === "reject" ? ` · source post rated: ${f.source_rating ?? "no opinion"}` : "";
+      return `- ${f.verdict.toUpperCase()}${f.why ? ` ("${f.why}")` : ""}: ${b?.title ?? f.card}\n    hook: ${b?.hook ?? ""}\n    format: ${c?.meta.format ?? "?"} · ${c?.meta.platform ?? "?"} · riff: ${c?.meta.riff_type ?? "?"}${src} · grounded in work notes: ${(c?.meta.brain_refs?.length ?? 0) > 0}`;
     })
     .join("\n");
   const myPosts = readJsonl<{ id: string; first_line: string; likes: number; comments: number; at: string }>(statePath("data", "my-posts.jsonl"));

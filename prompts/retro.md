@@ -12,4 +12,8 @@ Produce:
    Only propose a rule when this week's evidence supports it, and say what evidence. Each rule is one imperative
    sentence. He accepts or skips each one, so make them worth a click. Return none if nothing is clear.
 
+Idea quality and source quality are separate. A reject with "source post rated: good" means the idea failed but the
+post it riffed on was worth it: learn from the idea, not against the source. Keep source judgments out of the idea
+memories ("what works" / "what to avoid" are about ideas, angles, hooks, and formats).
+
 Base everything on the evidence given. With little feedback, say so and keep changes small.
