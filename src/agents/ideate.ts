@@ -141,7 +141,7 @@ const callModel = traceable(
   { name: "ideate", run_type: "chain" },
 );
 
-function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: string | null): CardMeta {
+function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: string | null, noteIds: string[] = []): CardMeta {
   const evidence = [...new Set([...(d.riff_on ? [d.riff_on] : []), ...d.evidence.map((e) => e.item_id)])];
   const sources = [...new Set(evidence.map((id) => hooks.find((h) => h.item_id === id)?.source_id).filter((s): s is string => !!s))];
   return {
@@ -154,7 +154,7 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
     format: d.format,
     sources,
     evidence,
-    brain_refs: d.brain_refs,
+    brain_refs: noteIds.length ? normalizeRefs(d.brain_refs, noteIds) : d.brain_refs,
     seed,
     langsmith_run_id: runId,
     model: MODELS.ideate,
@@ -211,6 +211,21 @@ export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: n
   return issues;
 }
 
+/** Snap the model's work-note references to exact item ids (it sometimes drops the "brain:" prefix or the #section). */
+export function normalizeRefs(refs: string[], known: string[]): string[] {
+  const out = new Set<string>();
+  for (const raw of refs) {
+    const r = raw.trim();
+    const withPrefix = r.startsWith("brain:") ? r : `brain:${r}`;
+    if (known.includes(withPrefix)) out.add(withPrefix);
+    else {
+      const base = withPrefix.split("#")[0];
+      for (const k of known) if (k.split("#")[0] === base) out.add(k);
+    }
+  }
+  return [...out];
+}
+
 /** Generate, check, and repair once: flagged cards are sent back with the reasons and replaced. */
 async function generateChecked(user: string, n: number, hooks: HookRecord[]): Promise<{ cards: CardDraft[]; usd: number; run_id: string | null; repaired: number }> {
   const first = await callModel({ system: prompt("ideate"), user, n });
@@ -241,7 +256,7 @@ export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean }
     for (const c of cards) console.log(`\n[${c.platform}/${c.format}] ${c.title}\n  ${c.hook}`);
     return { files: [], usd, runId: run_id };
   }
-  const files = cards.map((c) => writeCard("inbox", toMeta(c, hooks, run_id, null), cardBody(c)));
+  const files = cards.map((c) => writeCard("inbox", toMeta(c, hooks, run_id, null, notes.map((n) => n.id)), cardBody(c)));
   if (opts.post !== false && process.env.SLACK_BOT_TOKEN) await postCards(files, `*${files.length} new idea cards.* Approve, rewrite, or reject each one below.`);
   return { files, usd, runId: run_id };
 }
@@ -253,7 +268,7 @@ export async function ideateOne(prev: Card): Promise<IdeateResult> {
   const extra = `REWRITE REQUEST\nThe owner marked this card "rewrite" — good idea, wrong angle. Their note: "${prev.meta.why || "(no note)"}".\nOriginal card:\n${prev.body}\n\nWrite one replacement card that keeps what was good and follows their note.`;
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: 1 });
   const c = cards[0];
-  const file = writeCard("inbox", toMeta(c, hooks, run_id, `rewrite:${prev.meta.id}`), cardBody(c));
+  const file = writeCard("inbox", toMeta(c, hooks, run_id, `rewrite:${prev.meta.id}`, notes.map((n) => n.id)), cardBody(c));
   if (process.env.SLACK_BOT_TOKEN) await postCards([file], `Rewrite of _${prev.body.split("\n")[0].replace(/^# /, "")}_ — following your note: “${prev.meta.why}”`);
   return { files: [file], usd, runId: run_id };
 }
@@ -267,7 +282,7 @@ export async function ideateFromSaved(items: { id: string; author: string | null
   const extra = `THE OWNER SAVED THIS FOR YOU\nThey dropped these post(s) into Slack because they caught their eye${note ? `, with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${items.length > 1 ? 3 : 2} cards that riff on what he saved, connected to his own work where it fits. One may be a screenshot-commentary card (quote the post, add his take). Cite the saved item ids in evidence.`;
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: items.length > 1 ? 3 : 2 });
   const files = cards.map((c) => {
-    const meta = toMeta(c, hooks, run_id, `saved:${items[0]?.id}`);
+    const meta = toMeta(c, hooks, run_id, `saved:${items[0]?.id}`, notes.map((n) => n.id));
     meta.evidence = [...new Set([...meta.evidence, ...items.map((i) => i.id)])];
     return writeCard("inbox", meta, cardBody(c));
   });
@@ -285,7 +300,31 @@ export async function ideateAnotherAngle(prev: Card): Promise<IdeateResult> {
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(pool, notes, extra), n: 1 });
   const c = cards[0];
   if (riff) c.riff_on = riff;
-  const file = writeCard("inbox", toMeta(c, pool, run_id, `angle:${prev.meta.id}`), cardBody(c));
+  const file = writeCard("inbox", toMeta(c, pool, run_id, `angle:${prev.meta.id}`, notes.map((n) => n.id)), cardBody(c));
   if (process.env.SLACK_BOT_TOKEN) await postCards([file], "*Another angle on the same post*", prev.meta.slack);
   return { files: [file], usd, runId: run_id };
+}
+
+/** What the idea generator actually receives right now (for the health check: "is memory really referenced?"). */
+export async function ideationInputs(): Promise<{ swipe: number; swipeWithExcerpt: number; notes: number; notesProjects: number; myPosts: number; facts: number; winning: number; avoid: number; avoidTopics: number; rules: number; recentTopics: number; promptChars: number }> {
+  const hooks = swipeFile(21, 45);
+  const notes = await workNotes(30, 20);
+  const items = itemsById(hooks.map((h) => h.item_id));
+  const bullets = (t: string) => t.split("\n").filter((l) => l.trim().startsWith("- ")).length;
+  const rendered = prompt("ideate") + render(hooks, notes, "");
+  const rulesFile = statePath("prompts", "rules", "ideate.md");
+  return {
+    swipe: hooks.length,
+    swipeWithExcerpt: hooks.slice(0, 18).filter((h) => items.get(h.item_id)?.text).length,
+    notes: notes.length,
+    notesProjects: new Set(notes.map((n) => projectKey(n.id))).size,
+    myPosts: myPosts(15).split("\n").filter(Boolean).length,
+    facts: bullets(readMemory("facts")),
+    winning: bullets(readMemory("winning-patterns")),
+    avoid: bullets(readMemory("rejected")),
+    avoidTopics: avoidTopics().length,
+    rules: fs.existsSync(rulesFile) ? bullets(fs.readFileSync(rulesFile, "utf8")) : 0,
+    recentTopics: recentTopics(8).split("\n").filter(Boolean).length,
+    promptChars: rendered.length,
+  };
 }

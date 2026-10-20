@@ -135,6 +135,7 @@ async function command(env: Env, body: string): Promise<Response> {
         "`/ca terms` — what's being searched and how each term is doing",
         "`/ca source <url>` — follow a newsletter / LinkedIn profile / X account (starts as a candidate)",
         "`/ca ideate` — generate a fresh batch of idea cards now",
+        "`/ca health` — check that sources are pulled, memory is kept, and cards cite real data",
         "Or just paste a post link or screenshot in the channel and I'll riff on it.",
       ].join("\n"),
     });

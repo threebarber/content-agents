@@ -1,4 +1,5 @@
 import { schedules, logger } from "@trigger.dev/sdk";
+import { logRun } from "../lib/runlog.js";
 import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
 import { ideate } from "../agents/ideate.js";
 
@@ -12,6 +13,7 @@ export const ideateTask = schedules.task({
     const dir = checkoutState();
     const r = await ideate({ n: 7 });
     logger.info("ideate", { cards: r.files.length, usd: r.usd, run: r.runId });
+    await logRun("ideate", { cards: r.files.length, usd: r.usd, run: r.runId }, r.files.length ? [] : ["ideate produced no cards"]);
     const committed = commitState(dir, `ideate: ${r.files.length} cards ($${r.usd.toFixed(3)})`);
     return { cards: r.files.length, usd: r.usd, langsmithRun: r.runId, committed };
   },

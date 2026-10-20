@@ -21,6 +21,7 @@ import { ingestSocial } from "./agents/social.js";
 import { deriveTerms } from "./agents/terms.js";
 import { retro } from "./agents/retro.js";
 import { pinTerm, unpinTerm } from "./agents/slash.js";
+import { health, formatHealth } from "./agents/health.js";
 import { Source } from "../schemas/source.js";
 import { Term } from "../schemas/term.js";
 
@@ -385,6 +386,17 @@ program
   .option("--days <n>", "", "7")
   .option("--no-post", "don't post to Slack")
   .action(async (o) => console.log(JSON.stringify(await retro({ days: Number(o.days), post: o.post }))));
+
+program
+  .command("health")
+  .description("verify sources are pulled, memory is kept, and cards reference real data")
+  .option("--post", "also post the report to Slack")
+  .action(async (o) => {
+    const checks = await health();
+    console.log(formatHealth(checks));
+    if (o.post) await postMessage(process.env.SLACK_CHANNEL || "content-agents", "Health", sections(formatHealth(checks, true)));
+    if (checks.some((c) => c.status === "fail")) process.exitCode = 1;
+  });
 
 program.parseAsync().catch((e) => fail(e.message));
 

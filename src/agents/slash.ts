@@ -4,6 +4,7 @@ import { resolveSource } from "../registry/resolve.js";
 import { Term } from "../../schemas/term.js";
 import { Source } from "../../schemas/source.js";
 import { ideate } from "./ideate.js";
+import { health, formatHealth } from "./health.js";
 
 export function pinTerm(term: string, x = true): string {
   const f = loadTerms();
@@ -65,6 +66,7 @@ export async function runSlash(text: string): Promise<{ reply: string; public?: 
       const r = await ideate({ n: 5 });
       return { reply: `Posted ${r.files.length} new idea cards.` };
     }
+    case "health": return { reply: formatHealth(await health(), true) };
     default: return { reply: `Unknown command \`${cmd}\`. Try \`/ca help\`.` };
   }
 }
