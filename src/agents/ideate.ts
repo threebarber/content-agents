@@ -129,13 +129,16 @@ function render(hooks: HookRecord[], notes: BrainRow[], extra: string): string {
 
 const callModel = traceable(
   async (input: { system: string; user: string; n: number }) => {
-    const res = await claude().messages.parse({
-      model: MODELS.ideate,
-      max_tokens: 20000, // 10 cards + thinking; stays under the SDK's non-streaming limit
-      system: input.system,
-      output_config: { effort: "high", format: zodOutputFormat(IdeateOutput) },
-      messages: [{ role: "user", content: input.user + `\n\n=====\n\nWrite ${input.n} cards.` }],
-    });
+    // streamed: a 10-card batch plus thinking can exceed what a non-streaming request may ask for
+    const res = await claude()
+      .messages.stream({
+        model: MODELS.ideate,
+        max_tokens: 64000,
+        system: input.system,
+        output_config: { effort: "high", format: zodOutputFormat(IdeateOutput) },
+        messages: [{ role: "user", content: input.user + `\n\n=====\n\nWrite ${input.n} cards.` }],
+      })
+      .finalMessage();
     if (!res.parsed_output) throw new Error(`ideate: no parsed output (stop_reason=${res.stop_reason})`);
     return { cards: res.parsed_output.cards, usd: costUsd(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
   },

@@ -81,14 +81,12 @@ export function setFakeLLM(h: (r: FakeRequest) => unknown): void {
   fakeHandler = h;
   fakeCalls.length = 0;
 }
+type FakeParams = { model: string; system?: string; messages: { content: unknown }[]; output_config?: { format?: { schema?: { properties?: Record<string, unknown> } } } };
 function fakeClient() {
-  return {
-    messages: {
-      parse: async (req: { model: string; system?: string; messages: { content: unknown }[]; output_config?: { format?: { schema?: { properties?: Record<string, unknown> } } } }) => {
-        const r: FakeRequest = { model: req.model, system: req.system, messages: req.messages, schemaKeys: Object.keys(req.output_config?.format?.schema?.properties ?? {}) };
-        fakeCalls.push(r);
-        return { parsed_output: fakeHandler(r), usage: { input_tokens: 1000, output_tokens: 200 }, stop_reason: "end_turn", content: [] };
-      },
-    },
+  const parse = async (req: FakeParams) => {
+    const r: FakeRequest = { model: req.model, system: req.system, messages: req.messages, schemaKeys: Object.keys(req.output_config?.format?.schema?.properties ?? {}) };
+    fakeCalls.push(r);
+    return { parsed_output: fakeHandler(r), usage: { input_tokens: 1000, output_tokens: 200 }, stop_reason: "end_turn", content: [] };
   };
+  return { messages: { parse, stream: (req: FakeParams) => ({ finalMessage: () => parse(req) }) } };
 }

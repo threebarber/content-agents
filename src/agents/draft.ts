@@ -21,13 +21,15 @@ async function recentOwnPosts(k: number): Promise<string> {
 
 const callDraft = traceable(
   async (input: { system: string; user: string; maxTokens: number }) => {
-    const res = await claude().messages.parse({
-      model: MODELS.ideate,
-      max_tokens: input.maxTokens,
-      system: input.system,
-      output_config: { effort: "high", format: zodOutputFormat(DraftOut) },
-      messages: [{ role: "user", content: input.user }],
-    });
+    const res = await claude()
+      .messages.stream({
+        model: MODELS.ideate,
+        max_tokens: input.maxTokens,
+        system: input.system,
+        output_config: { effort: "high", format: zodOutputFormat(DraftOut) },
+        messages: [{ role: "user", content: input.user }],
+      })
+      .finalMessage();
     if (!res.parsed_output) throw new Error(`draft: no parsed output (stop_reason=${res.stop_reason})`);
     return { ...res.parsed_output, usd: costUsd(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
   },
@@ -51,7 +53,7 @@ export async function draftCard(card: Card): Promise<DraftResult> {
     `FACTS ABOUT THEIR WORK (never contradict)\n${readMemory("facts") || "(none)"}`,
     `WHAT THEY TEND TO APPROVE\n${readMemory("winning-patterns") || "(not enough feedback yet)"}`,
   ].join("\n\n=====\n\n");
-  const r = await callDraft({ system: prompt(linkedin ? "draft_linkedin" : "draft_hashnode"), user, maxTokens: linkedin ? 4000 : 12000 });
+  const r = await callDraft({ system: prompt(linkedin ? "draft_linkedin" : "draft_hashnode"), user, maxTokens: linkedin ? 16000 : 48000 });
   const words = r.draft.split(/\s+/).filter(Boolean).length;
   card.meta.verdict = "approve";
   const body = `${card.body.split("\n---\n")[0].trim()}\n\n---\n\n## Draft (${words} words)\n\n${r.draft}\n\n## Notes\n\n${r.notes}\n`;
