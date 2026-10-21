@@ -30,7 +30,7 @@ async function fetchPost(url: string): Promise<Item | null> {
   const d = detect(url);
   const now = new Date().toISOString();
   if (d?.type === "substack" && d.kind === "post") {
-    const u = new URL(url);
+    const u = new URL(d.url); // normalized (share links rewritten to <pub>.substack.com/p/<slug>)
     const slug = u.pathname.split("/p/")[1]?.split("/")[0];
     const home = `https://${u.host}`;
     const reg = loadSources();
@@ -117,7 +117,8 @@ export async function intake(p: IntakePayload, log: (m: string) => void = () => 
     it.found_via = "saved:slack";
     let s = findSource(reg, it.source_id);
     if (!s && ["linkedin", "x", "substack"].includes(it.type) && !it.source_id.endsWith(":unknown")) {
-      s = Source.parse({ id: it.source_id, type: it.type, name: it.author ?? undefined, author: it.author ?? undefined, url: it.author_url ?? null, status: "candidate", added_by: "human", added_at: today(), discovered_via: `saved:${it.id}` });
+      const home = it.type === "substack" ? `https://${it.id.split(":")[1]}` : null;
+      s = Source.parse({ id: it.source_id, type: it.type, name: it.author ?? undefined, author: it.author ?? undefined, url: it.author_url ?? home, method: it.type === "substack" ? "substack_api" : null, status: "candidate", added_by: "human", added_at: today(), discovered_via: `saved:${it.id}` });
       reg.sources.push(s);
       sourcesAdded.push(s.id);
     }

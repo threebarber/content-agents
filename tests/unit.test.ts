@@ -26,6 +26,9 @@ test("detect classifies sources and posts", () => {
   assert.equal(detect("https://twitter.com/dan")?.url, "https://x.com/dan");
   assert.equal(detect("@dan")?.type, "x");
   assert.equal(detect("https://www.growthunhinged.com/p/x")?.type, "substack"); // /p/ on a custom domain
+  const share = detect("https://open.substack.com/pub/gtmedownload/p/grok-bot-clay-x-use-cases?r=6grbfv&utm_medium=ios");
+  assert.deepEqual([share?.kind, share?.url], ["post", "https://gtmedownload.substack.com/p/grok-bot-clay-x-use-cases"], "mobile share link is a post, not a source called 'open'");
+  assert.equal(detect("https://open.substack.com/pub/gtmedownload")?.url, "https://gtmedownload.substack.com");
 });
 
 test("normalizeUrl strips www, query, trailing slash", () => {

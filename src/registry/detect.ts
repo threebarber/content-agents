@@ -30,6 +30,15 @@ export function detect(input: string): Detected | null {
     if (parts[1] === "status") return { type: "x", url: `https://x.com/${parts[0]}/status/${parts[2]}`, kind: "post", key: parts[2] };
     return null;
   }
+  // Substack app/share links: open.substack.com/pub/<pub>/p/<slug> (iOS/Android share sheet) and /pub/<pub>
+  if (host === "open.substack.com" || (host === "substack.com" && path.startsWith("/pub/"))) {
+    const m = path.match(/^\/pub\/([^/]+)(?:\/p\/([^/]+))?/);
+    if (!m) return null;
+    const pub = m[1].toLowerCase();
+    return m[2]
+      ? { type: "substack", url: `https://${pub}.substack.com/p/${m[2]}`, kind: "post", key: `${pub}.substack.com` }
+      : { type: "substack", url: `https://${pub}.substack.com`, kind: "source", key: pub };
+  }
   if (host.endsWith("substack.com") || path.startsWith("/p/") || path === "/archive") {
     const home = `https://${host}`;
     if (host === "substack.com") return null; // substack.com/@user profiles not supported yet
