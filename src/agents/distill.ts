@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { claude, MODELS, prompt, costUsd } from "./llm.js";
+import { claude, MODELS, prompt, tally } from "./llm.js";
 import { HookExtraction, type HookRecord } from "../../schemas/hook.js";
 import { normalizeFormat } from "../../schemas/card.js";
 import type { Item } from "../../schemas/item.js";
@@ -66,7 +66,7 @@ export async function distill(opts: { limit?: number; concurrency?: number; log?
           output_config: { format: zodOutputFormat(HookExtraction) },
         });
         const p = res.parsed_output;
-        stats.usd += costUsd(MODELS.distill, res.usage);
+        stats.usd += tally(MODELS.distill, res.usage);
         if (!p && res.stop_reason === "refusal") {
           // a post the model won't summarize is off-topic for us: record it as skipped (never retried) and as a miss
           out.push({ item_id: it.id, source_id: it.source_id, author: it.author, title: it.title, url: it.url, published_at: it.published_at, engagement_z: null, hit: false, model: MODELS.distill, distilled_at: new Date().toISOString(), skipped: "model declined", hook: "", hook_template: "", format: "other", topics: [], core_claim: "", why_it_worked: "", hook_quality: 0, relevance: 0 });

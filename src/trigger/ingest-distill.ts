@@ -1,5 +1,6 @@
 import { schedules, logger } from "@trigger.dev/sdk";
 import { logRun } from "../lib/runlog.js";
+import { tokenTally } from "../agents/llm.js";
 import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
 import { loadSources, saveSources, loadForaging, loadBudget } from "../registry/store.js";
 import { allocate } from "../registry/thompson.js";
@@ -97,7 +98,7 @@ export const ingestDistill = schedules.task({
       }
     }
 
-    await logRun("ingest-distill", { written, brainNew, decayed, distilled: distilled.distilled, hits: distilled.hits, distillFailed: distilled.failed, usd: distilled.usd, sources: plan.length }, [...errors, ...(distilled.failed ? [`distill: ${distilled.failed} posts failed`] : [])]);
+    await logRun("ingest-distill", { tokens: { ...tokenTally }, written, brainNew, decayed, distilled: distilled.distilled, hits: distilled.hits, distillFailed: distilled.failed, usd: distilled.usd, sources: plan.length }, [...errors, ...(distilled.failed ? [`distill: ${distilled.failed} posts failed`] : [])]);
     const committed = commitState(dir, `ingest: ${written} substack, ${brainNew} brain, ${distilled.distilled} distilled ($${distilled.usd.toFixed(3)}), ${decayed} decayed (${new Date(payload.timestamp).toISOString().slice(0, 10)})`);
     return { written, brainNew, decayed, distilled, sources: plan.length, errors, committed };
   },

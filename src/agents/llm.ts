@@ -63,9 +63,28 @@ const PRICES: Record<string, [number, number]> = {
   "claude-sonnet-5-5": [2, 10],
   "claude-opus-5-5": [4, 20],
 };
-export function costUsd(model: string, usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null }): number {
+export type Usage = { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null };
+
+/** Dollar cost of one call: uncached input, cache writes (1.25x), cache reads (0.1x), output; Batch API halves everything. */
+export function costUsd(model: string, usage: Usage, opts: { batch?: boolean } = {}): number {
   const [i, o] = PRICES[model] ?? [4, 20];
-  return ((usage.input_tokens + (usage.cache_read_input_tokens ?? 0) * 0.1) * i + usage.output_tokens * o) / 1e6;
+  const usd = (usage.input_tokens * i + (usage.cache_creation_input_tokens ?? 0) * i * 1.25 + (usage.cache_read_input_tokens ?? 0) * i * 0.1 + usage.output_tokens * o) / 1e6;
+  return opts.batch ? usd / 2 : usd;
+}
+
+/** Running token totals for a task run (written to the run log so cost and cache hits are visible). */
+export const tokenTally = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, usd: 0 };
+export function resetTally(): void {
+  Object.assign(tokenTally, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, usd: 0 });
+}
+export function tally(model: string, u: Usage, opts: { batch?: boolean } = {}): number {
+  const usd = costUsd(model, u, opts);
+  tokenTally.input += u.input_tokens;
+  tokenTally.output += u.output_tokens;
+  tokenTally.cacheRead += u.cache_read_input_tokens ?? 0;
+  tokenTally.cacheWrite += u.cache_creation_input_tokens ?? 0;
+  tokenTally.usd += usd;
+  return usd;
 }
 
 /**
@@ -88,5 +107,31 @@ function fakeClient() {
     fakeCalls.push(r);
     return { parsed_output: fakeHandler(r), usage: { input_tokens: 1000, output_tokens: 200 }, stop_reason: "end_turn", content: [] };
   };
-  return { messages: { parse, stream: (req: FakeParams) => ({ finalMessage: () => parse(req) }) } };
+  const batches = new Map<string, { req: FakeParams; polls: number }>();
+  return {
+    messages: {
+      parse,
+      stream: (req: FakeParams) => ({ finalMessage: () => parse(req) }),
+      batches: {
+        create: async (b: { requests: { custom_id: string; params: FakeParams }[] }) => {
+          const id = `batch_${batches.size + 1}`;
+          batches.set(id, { req: b.requests[0].params, polls: 0 });
+          return { id, processing_status: "in_progress" };
+        },
+        retrieve: async (id: string) => {
+          const b = batches.get(id)!;
+          b.polls++;
+          return { id, processing_status: b.polls >= 2 ? "ended" : "in_progress" };
+        },
+        cancel: async () => ({}),
+        results: async (id: string) => {
+          const b = batches.get(id)!;
+          const r = await parse(b.req);
+          return (async function* () {
+            yield { custom_id: "ideate", result: { type: "succeeded", message: { content: [{ type: "text", text: JSON.stringify(r.parsed_output) }], usage: r.usage } } };
+          })();
+        },
+      },
+    },
+  };
 }

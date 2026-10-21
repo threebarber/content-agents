@@ -1,5 +1,11 @@
 import { tasks } from "@trigger.dev/sdk";
 import { postMessage, sections } from "../lib/slack.js";
+import { resetTally } from "../agents/llm.js";
+
+/** Workers can be reused between runs: start every run with a fresh token tally. */
+tasks.onStartAttempt(async () => {
+  resetTally();
+});
 
 /** Any task that fails for good (after retries) posts a Slack alert, so nothing breaks silently. */
 tasks.onFailure(async ({ task, error }) => {

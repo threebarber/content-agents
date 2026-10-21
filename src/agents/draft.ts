@@ -1,7 +1,7 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
-import { claude, MODELS, prompt, readMemory, costUsd } from "./llm.js";
+import { claude, MODELS, prompt, readMemory, tally } from "./llm.js";
 import { writeCard, type Card } from "./cards.js";
 import { cardContent } from "./cards.js";
 import { loadHooks } from "./distill.js";
@@ -31,7 +31,7 @@ const callDraft = traceable(
       })
       .finalMessage();
     if (!res.parsed_output) throw new Error(`draft: no parsed output (stop_reason=${res.stop_reason})`);
-    return { ...res.parsed_output, usd: costUsd(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
+    return { ...res.parsed_output, usd: tally(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
   },
   { name: "draft", run_type: "chain" },
 );

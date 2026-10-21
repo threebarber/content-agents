@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { claude, MODELS, costUsd } from "./llm.js";
+import { claude, MODELS, tally } from "./llm.js";
 import { loadHooks } from "./distill.js";
 import { loadSources, loadTerms, saveTerms, loadBudget, slugify, today } from "../registry/store.js";
 import { statePath } from "../lib/paths.js";
@@ -81,7 +81,7 @@ ${perf || "(none yet)"}`,
       },
     ],
   });
-  const usd = costUsd(MODELS.ideate, res.usage);
+  const usd = tally(MODELS.ideate, res.usage);
   const proposed = (res.parsed_output?.terms ?? []).slice(0, slots);
   if (opts.dry) return { added: [], kept: [], retired: [], usd, proposed };
 

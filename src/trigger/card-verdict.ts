@@ -1,5 +1,7 @@
 import { task, logger } from "@trigger.dev/sdk";
 import { stateWrites } from "./queues.js";
+import { logRun } from "../lib/runlog.js";
+import { tokenTally } from "../agents/llm.js";
 import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
 import { listCards, writeCard } from "../agents/cards.js";
 import { sweepFeedback } from "../agents/feedback.js";
@@ -39,6 +41,7 @@ export const cardVerdict = task({
     if (p.slack) card.meta.slack = p.slack;
     writeCard("inbox", card.meta, card.body);
     const r = await sweepFeedback((m) => logger.info(m));
+    await logRun("card-verdict", { verdict: p.verdict, usd: r.usd, tokens: { ...tokenTally } });
     const committed = commitState(dir, `verdict: ${p.verdict} ${p.cardId} (via Slack)`);
     return { ...r, committed };
   },

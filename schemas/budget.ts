@@ -16,6 +16,8 @@ export const Budget = z.object({
     .prefault({}),
   backfill_days: z.number().int().default(90),
   ideas_per_batch: z.number().int().default(10),
+  ideate_effort: z.enum(["low", "medium", "high", "xhigh", "max"]).default("high"),
+  use_batch_api: z.boolean().default(true),
   social: z
     .object({
       linkedin_posts_per_term: z.number().int().default(15),

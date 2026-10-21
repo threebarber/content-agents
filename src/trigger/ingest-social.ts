@@ -1,5 +1,6 @@
 import { schedules, logger } from "@trigger.dev/sdk";
 import { logRun } from "../lib/runlog.js";
+import { tokenTally } from "../agents/llm.js";
 import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
 import { ingestSocial } from "../agents/social.js";
 import { distill } from "../agents/distill.js";
@@ -25,7 +26,7 @@ export const ingestSocialTask = schedules.task({
     }
     const social = await ingestSocial((m) => logger.info(m));
     const d = process.env.ANTHROPIC_API_KEY ? await distill({ limit: 400, concurrency: 6, log: (m) => logger.info(m) }) : null;
-    await logRun("ingest-social", { linkedin: social.linkedin, x: social.x, mine: social.mine, spend: social.spend_before, skipped: social.skipped ?? null, distilled: d?.distilled ?? 0, candidates: d?.candidates.length ?? 0 }, [...social.errors, ...(social.skipped ? [`skipped: ${social.skipped}`] : [])]);
+    await logRun("ingest-social", { tokens: { ...tokenTally }, linkedin: social.linkedin, x: social.x, mine: social.mine, spend: social.spend_before, skipped: social.skipped ?? null, distilled: d?.distilled ?? 0, candidates: d?.candidates.length ?? 0 }, [...social.errors, ...(social.skipped ? [`skipped: ${social.skipped}`] : [])]);
     const committed = commitState(dir, `social: ${social.linkedin} linkedin, ${social.x} x, ${social.mine} mine; distilled ${d?.distilled ?? 0}, +${d?.candidates.length ?? 0} candidates${social.skipped ? ` (skipped: ${social.skipped})` : ""}`);
     return { derived, social, distilled: d, committed };
   },

@@ -196,3 +196,32 @@ test("a post the model declines is recorded as skipped, counted as a miss, and n
   fakeModel();
   assert.equal((await distill({ limit: 50 })).distilled, 0, "not retried");
 });
+
+test("scheduled batch path: Batch API first pass at half price; prompt cache breakpoint sits between stable and volatile parts", async () => {
+  const llm = await import("../src/agents/llm.ts");
+  llm.resetTally();
+  const sleeps: number[] = [];
+  const r = await ideate({ n: 2, post: false, batch: { sleep: async (ms) => void sleeps.push(ms), deadlineMs: Date.now() + 60_000 } });
+  assert.equal(r.files.length, 2);
+  assert.ok(sleeps.length >= 1, "polled the batch");
+  const cardCalls = fakeCalls.filter((c) => c.schemaKeys.includes("cards"));
+  const content = cardCalls[0].messages[0].content as { text: string; cache_control?: unknown }[];
+  assert.equal(content.length, 2);
+  assert.deepEqual(content[0].cache_control, { type: "ephemeral" });
+  assert.match(content[0].text, /SWIPE FILE/);
+  assert.match(content[0].text, /FACTS ABOUT THEIR WORK/);
+  assert.ok(!content[0].text.includes("ALREADY COVERED"), "changing data stays out of the cached block");
+  assert.match(content[1].text, /ALREADY COVERED[\s\S]*Write 2 cards\./);
+  // first pass billed at batch rates, repair at normal rates: 1000 in / 200 out on Opus → $0.008 normal, $0.004 batch
+  assert.equal(llm.tokenTally.usd.toFixed(4), (0.004 + 0.008).toFixed(4));
+  assert.equal(llm.costUsd("claude-opus-5-5", { input_tokens: 1000, output_tokens: 0, cache_read_input_tokens: 10000, cache_creation_input_tokens: 0 }).toFixed(4), "0.0080");
+});
+
+test("click-driven calls share the exact cached prefix with each other", async () => {
+  const { ideateOne } = await import("../src/agents/ideate.ts");
+  const c = readCard(card("c-prefix", { verdict: "rewrite", why: "shorter" }));
+  await ideateOne(c);
+  await ideateOne(c);
+  const blocks = fakeCalls.filter((x) => x.schemaKeys.includes("cards")).map((x) => (x.messages[0].content as { text: string }[])[0].text);
+  assert.equal(blocks.at(-1), blocks.at(-2), "identical stable block → cache hit on the second click");
+});

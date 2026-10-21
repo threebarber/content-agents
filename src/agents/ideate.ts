@@ -2,7 +2,7 @@ import fs from "node:fs";
 import YAML from "yaml";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
-import { claude, MODELS, prompt, readMemory, costUsd } from "./llm.js";
+import { claude, MODELS, prompt, readMemory, tally } from "./llm.js";
 import { IdeateOutput, normalizeFormat, normalizeRiffType, type CardDraft, type CardMeta } from "../../schemas/card.js";
 import { loadHooks } from "./distill.js";
 import { cardBody, cardId, listCards, writeCard, repoUrl, type Card } from "./cards.js";
@@ -103,7 +103,13 @@ function covered(): string {
   return lines.join("\n") || "(none yet)";
 }
 
-function render(hooks: HookRecord[], notes: BrainRow[], extra: string): string {
+/**
+ * The ideation prompt in two parts. `stable` (memory, your posts, swipe file, work notes) is identical across every
+ * ideation call made from the same data, so it is sent first and cached; `volatile` (what was just covered, the
+ * specific request) goes after the cache breakpoint.
+ */
+type Rendered = { stable: string; volatile: string };
+function render(hooks: HookRecord[], notes: BrainRow[], extra: string): Rendered {
   const items = itemsById(hooks.map((h) => h.item_id));
   const sw = hooks
     .map((h, i) => {
@@ -114,33 +120,51 @@ function render(hooks: HookRecord[], notes: BrainRow[], extra: string): string {
     })
     .join("\n\n");
   const wn = notes.map((n) => `[${n.id}] (${n.kind}, ${n.published_at.slice(0, 10)}) ${n.title}\n${n.text.slice(0, 1200)}`).join("\n\n---\n\n");
-  return [
+  const stable = [
     `FACTS ABOUT THEIR WORK (corrections from them; never contradict)\n${readMemory("facts") || "(none)"}`,
     `LEARNED PREFERENCES\n${readMemory("winning-patterns") || "(none yet — first runs)"}\n\nREJECTED PATTERNS\n${readMemory("rejected") || "(none yet)"}`,
+    `NEVER THE TOPIC (may appear only as a one-line supporting example)\n${avoidTopics().map((t) => `- /${t.pattern}/ — ${t.why}`).join("\n") || "(none)"}`,
+    `THEIR RECENT LINKEDIN POSTS (their real voice and what landed; don't repeat these)\n${myPosts(15) || "(none fetched yet)"}`,
+    `SWIPE FILE (top posts from newsletters they follow and from LinkedIn/X searches on their topics, last 3 weeks)\n\n${sw || "(empty)"}`,
+    `WORK NOTES (redacted, last 30 days: what was built, decided, or thought — optional evidence, never the topic)\n\n${wn || "(none)"}`,
+  ].join("\n\n=====\n\n");
+  const volatile = [
     `ALREADY COVERED OR REJECTED\n${covered()}`,
     `TOPICS FROM THE LAST TWO BATCHES (pick different topics, different posts, different projects)\n${recentTopics(8) || "(none)"}`,
-    `NEVER THE TOPIC (may appear only as a one-line supporting example)\n${avoidTopics().map((t) => `- /${t.pattern}/ — ${t.why}`).join("\n") || "(none)"}`,
-    `HIS RECENT LINKEDIN POSTS (his real voice and what landed; don't repeat these)\n${myPosts(15) || "(none fetched yet)"}`,
-    `SWIPE FILE (top posts from newsletters he follows and from LinkedIn/X searches on his topics, last 3 weeks)\n\n${sw || "(empty)"}`,
-    `WORK NOTES (redacted, last 30 days: what was built, decided, or thought — optional evidence, never the topic)\n\n${wn || "(none)"}`,
     extra,
-  ].join("\n\n=====\n\n");
+  ].filter(Boolean).join("\n\n=====\n\n");
+  return { stable, volatile };
+}
+
+/** One shared context for batch and click-driven ideation, so the cached prefix is reused across clicks. */
+async function ideationContext(): Promise<{ hooks: HookRecord[]; notes: BrainRow[] }> {
+  return { hooks: swipeFile(21, 45), notes: await workNotes(30, 20) };
+}
+
+function ideateParams(system: string, r: Rendered, n: number) {
+  return {
+    model: MODELS.ideate,
+    max_tokens: 64000,
+    system,
+    output_config: { effort: loadBudget().ideate_effort, format: zodOutputFormat(IdeateOutput) },
+    messages: [
+      {
+        role: "user" as const,
+        content: [
+          { type: "text" as const, text: r.stable, cache_control: { type: "ephemeral" as const } },
+          { type: "text" as const, text: `${r.volatile}\n\n=====\n\nWrite ${n} cards.` },
+        ],
+      },
+    ],
+  };
 }
 
 const callModel = traceable(
-  async (input: { system: string; user: string; n: number }) => {
+  async (input: { system: string; user: Rendered; n: number }) => {
     // streamed: a 10-card batch plus thinking can exceed what a non-streaming request may ask for
-    const res = await claude()
-      .messages.stream({
-        model: MODELS.ideate,
-        max_tokens: 64000,
-        system: input.system,
-        output_config: { effort: "high", format: zodOutputFormat(IdeateOutput) },
-        messages: [{ role: "user", content: input.user + `\n\n=====\n\nWrite ${input.n} cards.` }],
-      })
-      .finalMessage();
+    const res = await claude().messages.stream(ideateParams(input.system, input.user, input.n)).finalMessage();
     if (!res.parsed_output) throw new Error(`ideate: no parsed output (stop_reason=${res.stop_reason})`);
-    return { cards: res.parsed_output.cards, usd: costUsd(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
+    return { cards: res.parsed_output.cards, usd: tally(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
   },
   { name: "ideate", run_type: "chain" },
 );
@@ -241,8 +265,9 @@ export function normalizeRefs(refs: string[], known: string[]): string[] {
 }
 
 /** Generate, check, and repair once: flagged cards are sent back with the reasons and replaced. */
-async function generateChecked(user: string, n: number, hooks: HookRecord[]): Promise<{ cards: CardDraft[]; usd: number; run_id: string | null; repaired: number }> {
-  const first = await callModel({ system: prompt("ideate"), user, n });
+type FirstPass = { cards: CardDraft[]; usd: number; run_id: string | null };
+async function generateChecked(user: Rendered, n: number, hooks: HookRecord[], firstPass?: FirstPass): Promise<{ cards: CardDraft[]; usd: number; run_id: string | null; repaired: number }> {
+  const first = firstPass ?? (await callModel({ system: prompt("ideate"), user, n }));
   let cards = first.cards;
   let usd = first.usd;
   const issues = verifyCards(cards, hooks, Math.max(1, n - 2));
@@ -252,7 +277,7 @@ async function generateChecked(user: string, n: number, hooks: HookRecord[]): Pr
   const report = flagged.map((i) => `Card ${i + 1} "${cards[i].title}" — hook: "${cards[i].hook}"\n  problems: ${issues.get(i)!.join("; ")}`).join("\n");
   const repair = await callModel({
     system: prompt("ideate"),
-    user: `${user}\n\n=====\n\nREVISION REQUIRED\nThese cards failed review:\n${report}\n\nCards already accepted (don't duplicate their posts or hook moves):\n${keep.map((c) => `- [${c.riff_on}] ${c.hook_template_used} :: ${c.hook}`).join("\n") || "(none)"}`,
+    user: { stable: user.stable, volatile: `${user.volatile}\n\n=====\n\nREVISION REQUIRED\nThese cards failed review:\n${report}\n\nCards already accepted (don't duplicate their posts or hook moves):\n${keep.map((c) => `- [${c.riff_on}] ${c.hook_template_used} :: ${c.hook}`).join("\n") || "(none)"}` },
     n: flagged.length,
   });
   usd += repair.usd;
@@ -260,11 +285,12 @@ async function generateChecked(user: string, n: number, hooks: HookRecord[]): Pr
   return { cards, usd, run_id: first.run_id, repaired: flagged.length };
 }
 
-export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean } = {}): Promise<IdeateResult> {
-  const hooks = swipeFile(21, 45);
-  const notes = await workNotes(30, 20);
+export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean; batch?: { sleep: (ms: number) => Promise<void>; deadlineMs: number } } = {}): Promise<IdeateResult> {
+  const { hooks, notes } = await ideationContext();
   const n = opts.n ?? loadBudget().ideas_per_batch;
-  const { cards, usd, run_id, repaired } = await generateChecked(render(hooks, notes, ""), n, hooks);
+  const rendered = render(hooks, notes, "");
+  const viaBatch = opts.batch ? await batchFirstPass(rendered, n, opts.batch).catch((e) => (console.error(`batch failed, using a normal request: ${(e as Error).message}`), null)) : null;
+  const { cards, usd, run_id, repaired } = await generateChecked(rendered, n, hooks, viaBatch ?? undefined);
   if (repaired) console.error(`ideate: repaired ${repaired} card(s) that failed review`);
   if (opts.dry) {
     for (const c of cards) console.log(`\n[${c.platform}/${c.format}] ${c.title}\n  ${c.hook}`);
@@ -277,8 +303,7 @@ export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean }
 
 /** Rewrite one card immediately using the owner's note. */
 export async function ideateOne(prev: Card): Promise<IdeateResult> {
-  const hooks = swipeFile(21, 30);
-  const notes = await workNotes(14, 15);
+  const { hooks, notes } = await ideationContext();
   const extra = `REWRITE REQUEST\nThe owner marked this card "rewrite" — good idea, wrong angle. Their note: "${prev.meta.why || "(no note)"}".\nOriginal card:\n${prev.body}\n\nWrite one replacement card that keeps what was good and follows their note.`;
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: 1 });
   const c = cards[0];
@@ -320,10 +345,10 @@ export async function ideateFromSaved(items: SavedItem[], note: string, thread?:
 
 /** the owner rejected the idea but liked the post: write one card with a genuinely different angle on the same post. */
 export async function ideateAnotherAngle(prev: Card): Promise<IdeateResult> {
-  const hooks = swipeFile(30, 45);
+  const { hooks, notes } = await ideationContext();
   const riff = prev.meta.riff_on;
-  const pool = riff && !hooks.some((h) => h.item_id === riff) ? [...loadHooks().filter((h) => h.item_id === riff), ...hooks] : hooks;
-  const notes = await workNotes(14, 15);
+  // the riffed post is appended (not prepended) when it's outside the shared context, so the cached prefix still matches
+  const pool = riff && !hooks.some((h) => h.item_id === riff) ? [...hooks, ...loadHooks().filter((h) => h.item_id === riff)] : hooks;
   const extra = `ANOTHER ANGLE REQUEST\nThe owner rejected this idea but rated the post it riffed on as good. Their note on the idea: "${prev.meta.why || "(none)"}".\nRejected card:\n${prev.body.split("\n---\n")[0]}\n\nWrite ONE new card that riffs on the same post (riff_on: ${riff ?? "the same post"}) with a different riff_type, a different angle, and a different hook move. Don't reuse the rejected idea's framing.`;
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(pool, notes, extra), n: 1 });
   const c = cards[0];
@@ -339,7 +364,8 @@ export async function ideationInputs(): Promise<{ swipe: number; swipeWithExcerp
   const notes = await workNotes(30, 20);
   const items = itemsById(hooks.map((h) => h.item_id));
   const bullets = (t: string) => t.split("\n").filter((l) => l.trim().startsWith("- ")).length;
-  const rendered = prompt("ideate") + render(hooks, notes, "");
+  const r = render(hooks, notes, "");
+  const rendered = prompt("ideate") + r.stable + r.volatile;
   const rulesFile = statePath("prompts", "rules", "ideate.md");
   return {
     swipe: hooks.length,
@@ -356,3 +382,37 @@ export async function ideationInputs(): Promise<{ swipe: number; swipeWithExcerp
     promptChars: rendered.length,
   };
 }
+
+/**
+ * Scheduled batches go through the Message Batches API: same request, half the price, results usually within the hour.
+ * Polls with the caller's sleep (Trigger.dev's wait.for checkpoints the run, so waiting costs nothing); past the deadline
+ * the batch is cancelled and the caller falls back to a normal request.
+ */
+const batchFirstPass = traceable(
+  async (r: Rendered, n: number, opts: { sleep: (ms: number) => Promise<void>; deadlineMs: number }): Promise<FirstPass | null> => {
+    const params = ideateParams(prompt("ideate"), r, n);
+    const { format, ...cfg } = params.output_config;
+    const batch = await claude().messages.batches.create({
+      requests: [{ custom_id: "ideate", params: { ...params, output_config: { ...cfg, format: { type: "json_schema", schema: (format as { schema: Record<string, unknown> }).schema } } } as never }],
+    });
+    for (;;) {
+      const b = await claude().messages.batches.retrieve(batch.id);
+      if (b.processing_status === "ended") break;
+      if (Date.now() > opts.deadlineMs) {
+        await claude().messages.batches.cancel(batch.id).catch(() => {});
+        return null;
+      }
+      await opts.sleep(3 * 60_000);
+    }
+    for await (const res of await claude().messages.batches.results(batch.id)) {
+      if (res.custom_id !== "ideate") continue;
+      if (res.result.type !== "succeeded") throw new Error(`batch request ${res.result.type}`);
+      const msg = res.result.message;
+      const text = msg.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+      const parsed = IdeateOutput.parse(JSON.parse(text));
+      return { cards: parsed.cards, usd: tally(MODELS.ideate, msg.usage, { batch: true }), run_id: getCurrentRunTree(true)?.id ?? null };
+    }
+    throw new Error("batch ended without a result");
+  },
+  { name: "ideate-batch", run_type: "chain" },
+);

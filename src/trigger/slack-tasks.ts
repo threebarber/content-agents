@@ -1,4 +1,6 @@
 import { task, logger } from "@trigger.dev/sdk";
+import { logRun } from "../lib/runlog.js";
+import { tokenTally } from "../agents/llm.js";
 import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
 import { intake, type IntakePayload } from "../agents/intake.js";
 import { runSlash } from "../agents/slash.js";
@@ -20,6 +22,7 @@ export const intakeTask = task({
     const dir = checkoutState();
     try {
       const r = await intake(p, (m) => logger.info(m));
+      await logRun("intake", { saved: r.saved.length, cards: r.cards, usd: r.usd, tokens: { ...tokenTally } });
       await react(p.channel, p.ts, "eyes", r.saved.length || r.sourcesAdded.length ? "white_check_mark" : r.repeats.length ? "recycle" : "x");
       return { ...r, committed: commitState(dir, `intake: ${r.saved.length} saved, ${r.sourcesAdded.length} sources, ${r.cards} cards`) };
     } catch (e) {

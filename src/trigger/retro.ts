@@ -1,5 +1,6 @@
 import { schedules, task, logger } from "@trigger.dev/sdk";
 import { logRun } from "../lib/runlog.js";
+import { tokenTally } from "../agents/llm.js";
 import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
 import { retro, decideProposal } from "../agents/retro.js";
 import { stateWrites } from "./queues.js";
@@ -14,7 +15,7 @@ export const retroTask = schedules.task({
     const dir = checkoutState();
     const r = await retro({});
     logger.info("retro", r);
-    await logRun("retro", { ...r });
+    await logRun("retro", { ...r, tokens: { ...tokenTally } });
     return { ...r, committed: commitState(dir, `retro: ${r.feedback} verdicts, ${r.proposals} proposals ($${r.usd.toFixed(3)})`) };
   },
 });

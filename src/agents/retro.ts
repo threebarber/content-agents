@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
-import { claude, MODELS, prompt, readMemory, costUsd, addPromptRule } from "./llm.js";
+import { claude, MODELS, prompt, readMemory, tally, addPromptRule } from "./llm.js";
 import { listCards, cardContent } from "./cards.js";
 import { statePath } from "../lib/paths.js";
 import { readJsonl, appendJsonl } from "../lib/jsonl.js";
@@ -60,7 +60,7 @@ const callRetro = traceable(
       messages: [{ role: "user", content: input.user }],
     });
     if (!res.parsed_output) throw new Error(`retro: no parsed output (stop_reason=${res.stop_reason})`);
-    return { ...res.parsed_output, usd: costUsd(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
+    return { ...res.parsed_output, usd: tally(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
   },
   { name: "retro", run_type: "chain" },
 );
