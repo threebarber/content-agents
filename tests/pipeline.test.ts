@@ -225,3 +225,19 @@ test("click-driven calls share the exact cached prefix with each other", async (
   const blocks = fakeCalls.filter((x) => x.schemaKeys.includes("cards")).map((x) => (x.messages[0].content as { text: string }[])[0].text);
   assert.equal(blocks.at(-1), blocks.at(-2), "identical stable block → cache hit on the second click");
 });
+
+test("short links are expanded before they're classified", async () => {
+  const { expandUrl } = await import("../src/lib/http.ts");
+  const target = "https://www.linkedin.com/posts/joerhew_the-og-gtm-engineers-share-7518693931749064704-j6rF/?utm_source=share";
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (u: string) => ({ url: u.includes("lnkd.in") ? target : u })) as never;
+  try {
+    assert.equal(await expandUrl("https://lnkd.in/p/gkKXF64h"), target);
+    assert.equal(await expandUrl("https://alpha.substack.com/p/x"), "https://alpha.substack.com/p/x", "non-shorteners untouched");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  const { detect } = await import("../src/registry/detect.ts");
+  assert.equal(detect(target)?.kind, "post");
+  assert.equal(detect(target)?.type, "linkedin");
+});

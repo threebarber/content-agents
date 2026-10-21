@@ -67,3 +67,23 @@ export function extractLinks(html: string): string[] {
   for (const m of html.matchAll(/href="(https?:\/\/[^"#?]+)/g)) out.add(m[1]);
   return [...out];
 }
+
+/** Link shorteners the apps share through (LinkedIn mobile uses lnkd.in, X uses t.co). */
+export const SHORTENERS = ["lnkd.in", "t.co", "bit.ly", "buff.ly", "ow.ly", "tinyurl.com", "shorturl.at", "rebrand.ly", "dlvr.it", "trib.al", "hubs.ly", "hubs.li", "sprou.tt"];
+
+/** Expand a shortened link to where it points (one fetch, following redirects); other links come back unchanged. */
+export async function expandUrl(url: string): Promise<string> {
+  let host: string;
+  try {
+    host = new URL(url).host.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+  if (!SHORTENERS.includes(host)) return url;
+  try {
+    const res = await fetch(url, { redirect: "follow", headers: { "user-agent": UA }, signal: AbortSignal.timeout(15_000) });
+    return res.url && res.url !== url ? res.url : url;
+  } catch {
+    return url;
+  }
+}

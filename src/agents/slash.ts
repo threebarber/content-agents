@@ -1,5 +1,6 @@
 import { loadTerms, saveTerms, loadSources, saveSources, findTerm, findExisting, slugify, today } from "../registry/store.js";
 import { detect } from "../registry/detect.js";
+import { expandUrl } from "../lib/http.js";
 import { resolveSource } from "../registry/resolve.js";
 import { Term } from "../../schemas/term.js";
 import { Source } from "../../schemas/source.js";
@@ -39,7 +40,8 @@ export function termsReport(): string {
   return `*Searched terms (${ts.length})*\n${rows.join("\n")}`;
 }
 
-export async function addSource(url: string): Promise<string> {
+export async function addSource(input: string): Promise<string> {
+  const url = await expandUrl(input);
   const d = detect(url);
   if (!d) return `Couldn't recognize ${url}.`;
   if (d.kind === "post") return "That's a single post: paste it in the channel instead and I'll riff on it.";

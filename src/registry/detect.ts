@@ -1,4 +1,5 @@
 import type { SourceType } from "../../schemas/source.js";
+import { SHORTENERS } from "../lib/http.js";
 
 export type Detected = { type: SourceType; url: string; kind: "source" | "post"; key: string };
 
@@ -46,7 +47,7 @@ export function detect(input: string): Detected | null {
       ? { type: "substack", url: `https://${pub}.substack.com/p/${m[2]}`, kind: "post", key: `${pub}.substack.com` }
       : { type: "substack", url: `https://${pub}.substack.com`, kind: "source", key: pub };
   }
-  if (host.endsWith("substack.com") || path.startsWith("/p/") || path === "/archive") {
+  if (host.endsWith("substack.com") || ((path.startsWith("/p/") || path === "/archive") && !SHORTENERS.includes(host))) {
     const home = `https://${host}`;
     if (host === "substack.com") return null; // substack.com/@user profiles not supported yet
     return path.startsWith("/p/")

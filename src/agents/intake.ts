@@ -7,7 +7,7 @@ import { itemsById } from "../lib/items.js";
 import { hit } from "../registry/pheromone.js";
 import { Source } from "../../schemas/source.js";
 import type { Item } from "../../schemas/item.js";
-import { getJson, getText, htmlToText } from "../lib/http.js";
+import { getJson, getText, htmlToText, expandUrl } from "../lib/http.js";
 import { toItem } from "../ingest/substack.js";
 import { linkedInPostByUrl, xPostByUrl } from "../ingest/social.js";
 import { writeItems } from "../lib/jsonl.js";
@@ -85,7 +85,8 @@ export async function intake(p: IntakePayload, log: (m: string) => void = () => 
   const sourcesAdded: string[] = [];
   const thread = { channel: p.channel, ts: p.ts };
 
-  for (const url of p.urls) {
+  for (const raw of p.urls) {
+    const url = await expandUrl(raw);
     const d = detect(url);
     if (d && d.kind === "source") {
       // a publication / profile link: follow it as a candidate
