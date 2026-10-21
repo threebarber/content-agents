@@ -113,7 +113,7 @@ async function events(env: Env, req: Request, body: string): Promise<Response> {
   if (e.type !== "event_callback" || ev.type !== "message" || ev.bot_id || ev.thread_ts) return new Response("");
   if (ev.subtype && ev.subtype !== "file_share") return new Response("");
   const text: string = ev.text ?? "";
-  const urls = [...text.matchAll(/<(https?:\/\/[^>|]+)(?:\|[^>]*)?>/g)].map((m) => m[1]);
+  const urls = [...text.matchAll(/<(https?:\/\/[^>|]+)(?:\|[^>]*)?>/g)].map((m) => m[1].replace(/&amp;/g, "&"));
   const files = (ev.files ?? []).filter((f: any) => String(f.mimetype ?? "").startsWith("image/")).map((f: any) => ({ url: f.url_private, mimetype: f.mimetype, name: f.name }));
   if (!urls.length && !files.length) return new Response("");
   await slack(env, "reactions.add", { channel: ev.channel, timestamp: ev.ts, name: "eyes" });

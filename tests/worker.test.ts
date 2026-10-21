@@ -66,11 +66,13 @@ test("Events: url_verification, link drop, and things that must be ignored", asy
   await post("/slack/events", ev({ type: "event_callback", event: { type: "message", user: "U1", channel: "C1", ts: "5.5", text: "look <https://alpha.substack.com/p/x|this> ok" } }));
   assert.equal(slackCalls("reactions.add").length, 1);
   assert.deepEqual(triggers("intake")[0].body.payload.urls, ["https://alpha.substack.com/p/x"]);
+  await post("/slack/events", ev({ type: "event_callback", event: { type: "message", user: "U1", channel: "C1", ts: "5.6", text: "<https://a.com/x?r=1&amp;u=2|a>" } }));
+  assert.deepEqual(triggers("intake")[1].body.payload.urls, ["https://a.com/x?r=1&u=2"], "Slack's &amp; is unescaped");
   for (const e of [{ bot_id: "B1", text: "<https://a.com>" }, { thread_ts: "1.0", text: "<https://a.com>" }, { text: "no links here" }, { subtype: "message_changed", text: "<https://a.com>" }])
     await post("/slack/events", ev({ type: "event_callback", event: { type: "message", user: "U1", channel: "C1", ts: "6.6", ...e } }));
   const retry = ev({ type: "event_callback", event: { type: "message", user: "U1", channel: "C1", ts: "7.7", text: "<https://a.com>" } });
   await post("/slack/events", retry, { ...sign(env.SLACK_SIGNING_SECRET, retry), "x-slack-retry-num": "1" });
-  assert.equal(triggers("intake").length, 1, "bots, threads, edits, no-link messages, and retries are ignored");
+  assert.equal(triggers("intake").length, 2, "bots, threads, edits, no-link messages, and retries are ignored");
 });
 
 test("/ca help answers directly; other subcommands go to the slash-command task", async () => {
