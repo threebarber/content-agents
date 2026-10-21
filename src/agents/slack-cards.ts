@@ -1,7 +1,7 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { postMessage, updateMessage, sections } from "../lib/slack.js";
-import { readCard, writeCard, repoUrl, type Card } from "./cards.js";
+import { readCard, writeCard, repoUrl, cardContent, type Card } from "./cards.js";
 import { loadHooks } from "./distill.js";
 import { claude, MODELS } from "./llm.js";
 import { itemsById } from "../lib/items.js";
@@ -101,7 +101,7 @@ function notesLine(card: Card): string {
 
 /** Block Kit for one card. Readable top to bottom: what to write, the hook, why it works, where it came from, decide. */
 export function cardBlocks(card: Card): Block[] {
-  const { title, hook, angle, template } = parseBody(card.body);
+  const { title, hook, angle, template } = cardContent(card);
   const m = card.meta;
   const url = repoUrl(card.file);
   const fmt = FORMAT[fmtKey(m.format)] ?? m.format;
@@ -141,7 +141,7 @@ export function decidedBlocks(blocks: Block[], line: string): Block[] {
 /** Older cards predate hook_breakdown: fill it in with one cheap call. */
 async function ensureBreakdown(card: Card): Promise<void> {
   if (card.meta.hook_breakdown) return;
-  const { hook } = parseBody(card.body);
+  const { hook } = cardContent(card);
   const res = await claude().messages.parse({
     model: MODELS.distill,
     max_tokens: 400,
@@ -159,7 +159,7 @@ export async function postCards(files: string[], heading: string, thread?: { cha
   for (const f of files) {
     const card = readCard(f);
     await ensureBreakdown(card).catch(() => {});
-    const { title } = parseBody(card.body);
+    const { title } = cardContent(card);
     const r = await postMessage(channel, title, cardBlocks(card), threadTs);
     card.meta.slack = { channel: r.channel, ts: r.ts };
     writeCard("inbox", card.meta, card.body);

@@ -3,8 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
 import { claude, MODELS, prompt, readMemory, costUsd, addPromptRule } from "./llm.js";
-import { listCards } from "./cards.js";
-import { parseBody } from "./slack-cards.js";
+import { listCards, cardContent } from "./cards.js";
 import { statePath } from "../lib/paths.js";
 import { readJsonl, appendJsonl } from "../lib/jsonl.js";
 import { postMessage, updateMessage, sections } from "../lib/slack.js";
@@ -12,8 +11,8 @@ import { loadSources, saveSources, loadTerms, loadForaging, findSource } from ".
 
 const RetroOut = z.object({
   summary: z.array(z.string()),
-  winning_patterns: z.string(),
-  rejected_patterns: z.string(),
+  winning_patterns: z.array(z.string()).describe("Full updated 'what works' list, one rule per item, no markdown."),
+  rejected_patterns: z.array(z.string()).describe("Full updated 'what to avoid' list, one rule per item, no markdown."),
   prompt_rules: z.array(z.object({ prompt: z.enum(["ideate", "draft_linkedin", "draft_hashnode", "distill"]), rule: z.string(), evidence: z.string() })),
 });
 
@@ -75,7 +74,7 @@ export async function retro(opts: { days?: number; post?: boolean } = {}): Promi
   const fbText = fb
     .map((f) => {
       const c = cards.get(f.card);
-      const b = c ? parseBody(c.body) : null;
+      const b = c ? cardContent(c) : null;
       const src = f.verdict === "reject" ? ` · source post rated: ${f.source_rating ?? "no opinion"}` : "";
       return `- ${f.verdict.toUpperCase()}${f.why ? ` ("${f.why}")` : ""}: ${b?.title ?? f.card}\n    hook: ${b?.hook ?? ""}\n    format: ${c?.meta.format ?? "?"} · ${c?.meta.platform ?? "?"} · riff: ${c?.meta.riff_type ?? "?"}${src} · grounded in work notes: ${(c?.meta.brain_refs?.length ?? 0) > 0}`;
     })
@@ -92,11 +91,9 @@ export async function retro(opts: { days?: number; post?: boolean } = {}): Promi
   ].join("\n\n=====\n\n");
   const r = await callRetro({ system: prompt("retro"), user });
 
-  // the model sometimes echoes the file's heading/italic stamp; keep only the bullets
-  const clean = (t: string) => t.split("\n").filter((l) => !/^#\s|^_.*_$/.test(l.trim())).join("\n").trim();
-  fs.writeFileSync(statePath("memory", "winning-patterns.md"), `# What works\n\n_Updated by the retro on ${new Date().toISOString().slice(0, 10)}._\n\n${clean(r.winning_patterns)}\n`);
-  fs.writeFileSync(statePath("memory", "rejected.md"), `# What to avoid\n\n_Updated by the retro on ${new Date().toISOString().slice(0, 10)}._\n\n${clean(r.rejected_patterns)}\n`);
-  const covered = ["drafted", "published"].flatMap((q) => listCards(q as "drafted").map((c) => `- ${parseBody(c.body).title}`));
+  writeMemory("winning-patterns", "What works", r.winning_patterns);
+  writeMemory("rejected", "What to avoid", r.rejected_patterns);
+  const covered = ["drafted", "published"].flatMap((q) => listCards(q as "drafted").map((c) => `- ${cardContent(c).title}`));
   fs.writeFileSync(statePath("memory", "topics-covered.md"), `# Topics already drafted or published\n\n${covered.join("\n") || "_none yet_"}\n`);
 
   const date = new Date().toISOString().slice(0, 10);
@@ -168,4 +165,30 @@ export async function decideProposal(id: string, decision: "accept" | "skip"): P
     await updateMessage(p.slack.channel, p.slack.ts, line, [...sections(text), { type: "context", elements: [{ type: "mrkdwn", text: line }] }]).catch(() => {});
   }
   return line;
+}
+
+/** Bullets from a memory file. */
+export function memoryBullets(name: string): string[] {
+  const f = statePath("memory", `${name}.md`);
+  if (!fs.existsSync(f)) return [];
+  return fs.readFileSync(f, "utf8").split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2).trim());
+}
+
+/**
+ * Rewrite a memory file from the retro's list, deterministically: [direct feedback] bullets from the current file are
+ * always kept verbatim (the model can't drop them), the model's items are cleaned of markdown and deduped.
+ */
+export function writeMemory(name: string, title: string, items: string[]): void {
+  const direct = memoryBullets(name).filter((b) => b.startsWith("[direct feedback]"));
+  const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const seen = new Set(direct.map(norm));
+  const inferred: string[] = [];
+  for (const raw of items) {
+    const t = raw.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").replace(/^#+\s*/, "").trim();
+    if (!t || t.startsWith("[direct feedback]") || /^_.*_$/.test(t) || seen.has(norm(t))) continue;
+    seen.add(norm(t));
+    inferred.push(t);
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  fs.writeFileSync(statePath("memory", `${name}.md`), `# ${title}\n\n_Updated by the retro on ${date}. [direct feedback] items are the owner's words and are never removed._\n\n${[...direct, ...inferred].map((b) => `- ${b}`).join("\n")}\n`);
 }

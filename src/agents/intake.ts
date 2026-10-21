@@ -29,6 +29,12 @@ const Shot = z.object({
 async function fetchPost(url: string): Promise<Item | null> {
   const d = detect(url);
   const now = new Date().toISOString();
+  if (d?.type === "substack" && d.kind === "post" && d.key.startsWith("postid:")) {
+    // app link with only a post id: look it up, then treat it like any post on its publication
+    const r = await getJson<{ post?: { canonical_url: string }; canonical_url?: string }>(`https://substack.com/api/v1/posts/by-id/${d.key.slice(7)}`);
+    const canonical = r.post?.canonical_url ?? r.canonical_url;
+    return canonical ? fetchPost(canonical) : null;
+  }
   if (d?.type === "substack" && d.kind === "post") {
     const u = new URL(d.url); // normalized (share links rewritten to <pub>.substack.com/p/<slug>)
     const slug = u.pathname.split("/p/")[1]?.split("/")[0];

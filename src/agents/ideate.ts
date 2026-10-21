@@ -3,7 +3,7 @@ import YAML from "yaml";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
 import { claude, MODELS, prompt, readMemory, costUsd } from "./llm.js";
-import { IdeateOutput, type CardDraft, type CardMeta } from "../../schemas/card.js";
+import { IdeateOutput, normalizeFormat, normalizeRiffType, type CardDraft, type CardMeta } from "../../schemas/card.js";
 import { loadHooks } from "./distill.js";
 import { cardBody, cardId, listCards, writeCard, repoUrl, type Card } from "./cards.js";
 import { withDb } from "../lib/duckdb.js";
@@ -146,9 +146,19 @@ const callModel = traceable(
 );
 
 function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: string | null, noteIds: string[] = []): CardMeta {
-  const evidence = [...new Set([...(d.riff_on ? [d.riff_on] : []), ...d.evidence.map((e) => e.item_id)])];
-  const sources = [...new Set(evidence.map((id) => hooks.find((h) => h.item_id === id)?.source_id).filter((s): s is string => !!s))];
+  // ids the model cites are checked against stored items: anything that doesn't exist is dropped, never stored
+  const cited = [...new Set([...(d.riff_on ? [d.riff_on] : []), ...d.evidence.map((e) => e.item_id)])];
+  const known = itemsById(cited);
+  const evidence = cited.filter((id) => known.has(id));
+  if (d.riff_on && !known.has(d.riff_on)) d.riff_on = null;
+  const sourceOf = (id: string) => hooks.find((h) => h.item_id === id)?.source_id ?? known.get(id)?.source_id;
+  const sources = [...new Set(evidence.map(sourceOf).filter((s): s is string => !!s && s !== "brain" && !s.startsWith("web:")))];
+  d.format = normalizeFormat(d.format);
+  d.riff_type = d.riff_on ? normalizeRiffType(d.riff_type) : "original";
+  d.brain_refs = noteIds.length ? normalizeRefs(d.brain_refs, noteIds) : d.brain_refs;
+  d.evidence = d.evidence.filter((e) => known.has(e.item_id));
   return {
+    content: d,
     id: cardId(d.title),
     created_at: new Date().toISOString(),
     platform: d.platform,
@@ -158,7 +168,7 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
     format: d.format,
     sources,
     evidence,
-    brain_refs: noteIds.length ? normalizeRefs(d.brain_refs, noteIds) : d.brain_refs,
+    brain_refs: d.brain_refs,
     seed,
     langsmith_run_id: runId,
     model: MODELS.ideate,
@@ -278,16 +288,30 @@ export async function ideateOne(prev: Card): Promise<IdeateResult> {
 }
 
 
-/** Riff on posts the owner dropped into Slack (links or screenshots), steered by their note. */
-export async function ideateFromSaved(items: { id: string; author: string | null; title: string | null; text: string; metrics: { likes: number | null; comments: number | null } }[], note: string, thread?: { channel: string; ts: string }): Promise<IdeateResult> {
-  const hooks = swipeFile(21, 20);
-  const notes = await workNotes(14, 15);
-  const saved = items.map((i) => `[${i.id}] ${i.author ?? "?"} (❤️${i.metrics.likes ?? "?"} 💬${i.metrics.comments ?? "?"})\n${i.text.slice(0, 3000)}`).join("\n\n");
-  const extra = `THE OWNER SAVED THIS FOR YOU\nThey dropped these post(s) into Slack because they caught their eye${note ? `, with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${items.length > 1 ? 3 : 2} cards that riff on what he saved, connected to his own work where it fits. One may be a screenshot-commentary card (quote the post, add his take). Cite the saved item ids in evidence.`;
-  const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: items.length > 1 ? 3 : 2 });
-  const files = cards.map((c) => {
-    const meta = toMeta(c, hooks, run_id, `saved:${items[0]?.id}`, notes.map((n) => n.id));
-    meta.evidence = [...new Set([...meta.evidence, ...items.map((i) => i.id)])];
+type SavedItem = { id: string; source_id: string; author: string | null; title: string | null; text: string; url: string; published_at: string; metrics: { likes: number | null; comments: number | null } };
+
+/**
+ * Riff on posts the owner dropped into Slack. Each card's riff_on is the saved post, assigned in code (the model only
+ * chooses the angle); the swipe file is shown as background, not as material to riff on.
+ */
+export async function ideateFromSaved(items: SavedItem[], note: string, thread?: { channel: string; ts: string }): Promise<IdeateResult> {
+  const stored = new Map(loadHooks().map((h) => [h.item_id, h]));
+  const savedHooks: HookRecord[] = items.map((i) => stored.get(i.id) ?? {
+    item_id: i.id, source_id: i.source_id, author: i.author, title: i.title, url: i.url, published_at: i.published_at, engagement_z: null, hit: true,
+    model: "", distilled_at: "", hook: (i.title ?? i.text.split("\n")[0]).slice(0, 200), hook_template: "", format: "other", topics: [], core_claim: "", why_it_worked: "", hook_quality: 3, relevance: 3,
+  });
+  const background = swipeFile(21, 12).filter((h) => !items.some((i) => i.id === h.item_id));
+  const notes = await workNotes(30, 15);
+  const per = items.length > 1 ? 1 : 2;
+  const n = Math.min(4, per * items.length);
+  const saved = items.map((i) => `[${i.id}] ${i.author ?? "?"} — "${i.title ?? ""}" (❤️${i.metrics.likes ?? "?"} 💬${i.metrics.comments ?? "?"})\n${i.text.slice(0, 6000)}`).join("\n\n---\n\n");
+  const extra = `SAVED POST(S): THE SUBJECT OF THIS BATCH\nThe owner dropped ${items.length > 1 ? "these posts" : "this post"} into Slack${note ? ` with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${n} card(s). Every card must respond to a saved post above: set riff_on to its id (${items.map((i) => i.id).join(", ")}), and their_point to what that post specifically argued. Use the SWIPE FILE only as background for what else people are saying; do not riff on it. Pull evidence from the work notes where it fits. Use a different riff_type and hook move for each card.`;
+  const { cards, usd, run_id } = await generateChecked(render([...savedHooks, ...background], notes, extra), n, savedHooks);
+  const files = cards.map((c, k) => {
+    // enforce the subject: a card that wandered to another post is pointed back at the saved one
+    if (!items.some((i) => i.id === c.riff_on)) c.riff_on = items[k % items.length].id;
+    if (!c.evidence.some((e) => e.item_id === c.riff_on)) c.evidence.unshift({ item_id: c.riff_on!, why: "saved by the owner" });
+    const meta = toMeta(c, [...savedHooks, ...background], run_id, `saved:${c.riff_on}`, notes.map((x) => x.id));
     return writeCard("inbox", meta, cardBody(c));
   });
   if (process.env.SLACK_BOT_TOKEN) await postCards(files, `*${files.length} ideas from what you saved*`, thread);

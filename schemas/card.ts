@@ -19,6 +19,21 @@ export const CardDraft = z.object({
 });
 export type CardDraft = z.infer<typeof CardDraft>;
 
+/** Fixed vocabularies. The model writes free text; code maps it onto these (unknown → "other"). */
+export const FORMATS = ["story", "list", "contrarian", "teardown", "howto", "data", "casestudy", "screenshotcommentary", "question", "essay", "roundup", "interview", "announcement", "other"] as const;
+export const RIFF_TYPES = ["extend", "disagree", "apply", "teardown", "reacttodata", "screenshotcommentary", "original"] as const;
+const key = (s: string) => (s ?? "").toLowerCase().replace(/[^a-z]/g, "");
+const FORMAT_SYNONYMS: Record<string, string> = { tutorial: "howto", guide: "howto", walkthrough: "howto", stats: "data", numbers: "data", research: "data", case: "casestudy", hottake: "contrarian", opinion: "contrarian", listicle: "list", thread: "list", narrative: "story", personalstory: "story", screenshot: "screenshotcommentary", quotetweet: "screenshotcommentary", podcast: "interview", news: "announcement", launch: "announcement", newsletter: "roundup", digest: "roundup" };
+const RIFF_SYNONYMS: Record<string, string> = { agree: "extend", build: "extend", buildon: "extend", pushback: "disagree", counter: "disagree", contrarian: "disagree", tryit: "apply", application: "apply", dissect: "teardown", data: "reacttodata", reacttonumbers: "reacttodata", quote: "screenshotcommentary", screenshot: "screenshotcommentary", worknotes: "original", own: "original" };
+export function normalizeFormat(s: string): string {
+  const k = key(s);
+  return (FORMATS as readonly string[]).includes(k) ? k : FORMAT_SYNONYMS[k] ?? "other";
+}
+export function normalizeRiffType(s: string): string {
+  const k = key(s);
+  return (RIFF_TYPES as readonly string[]).includes(k) ? k : RIFF_SYNONYMS[k] ?? "extend";
+}
+
 export const IdeateOutput = z.object({ cards: z.array(CardDraft) });
 
 export const Verdict = z.enum(["pending", "approve", "reject", "rewrite"]);
@@ -42,6 +57,8 @@ export type CardMeta = {
   published_url: string;
   slack?: { channel: string; ts: string };
   hook_breakdown?: string;
+  /** The structured card as generated (normalized). Slack, drafts, and the retro read this, not the markdown. */
+  content?: CardDraft;
   riff_on?: string | null;
   riff_type?: string;
   their_point?: string | null;

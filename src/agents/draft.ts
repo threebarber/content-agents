@@ -3,7 +3,7 @@ import { z } from "zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
 import { claude, MODELS, prompt, readMemory, costUsd } from "./llm.js";
 import { writeCard, type Card } from "./cards.js";
-import { parseBody } from "./slack-cards.js";
+import { cardContent } from "./cards.js";
 import { loadHooks } from "./distill.js";
 import { itemsById } from "../lib/items.js";
 import { postMessage, sections } from "../lib/slack.js";
@@ -64,7 +64,7 @@ export async function draftCard(card: Card): Promise<DraftResult> {
 
 async function postDraftThread(card: Card, draft: string, notes: string, words: number): Promise<void> {
   const { channel, ts } = card.meta.slack!;
-  const { title } = parseBody(card.body);
+  const { title } = cardContent(card);
   const label = card.meta.platform === "linkedin" ? "LinkedIn post" : "Hashnode article";
   // Slack sections cap at 3,000 chars: split on paragraph boundaries into code blocks (easy to copy, keeps line breaks)
   const chunks: string[] = [];

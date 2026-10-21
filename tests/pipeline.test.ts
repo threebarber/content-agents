@@ -25,11 +25,11 @@ function fakeModel() {
     if (r.schemaKeys.includes("hook_template")) return { hook: "a hook", hook_template: "[x] did [y]", format: "Data!", topics: ["gtm engineering"], core_claim: "c", why_it_worked: "w", hook_quality: 5, relevance: 5 };
     if (r.schemaKeys.includes("draft")) return { draft: "para one\n\npara two", notes: "- check the number" };
     if (r.schemaKeys.includes("breakdown")) return { breakdown: "a number" };
-    if (r.schemaKeys.includes("summary")) return { summary: ["rejects plumbing"], winning_patterns: "# What works\n_stamp_\n- numbers", rejected_patterns: "- plumbing", prompt_rules: [{ prompt: "ideate", rule: "Lead with the audience's problem.", evidence: "2 rejects" }] };
+    if (r.schemaKeys.includes("summary")) return { summary: ["rejects plumbing"], winning_patterns: ["# What works", "_stamp_", "- numbers", "1. numbers"], rejected_patterns: ["- plumbing"], prompt_rules: [{ prompt: "ideate", rule: "Lead with the audience's problem.", evidence: "2 rejects" }] };
     if (r.schemaKeys.includes("cards")) {
       ideateRound++;
       if (user.includes("REVISION REQUIRED")) return { cards: [goodCard({ title: "Repaired card", hook: "3 SEs, 1 Slack bot, 30 minutes.", riff_on: "linkedin:999", hook_template_used: "fixed move", brain_refs: [] })] };
-      if (user.includes("REWRITE REQUEST") || user.includes("ANOTHER ANGLE REQUEST") || user.includes("SAVED THIS FOR YOU"))
+      if (user.includes("REWRITE REQUEST") || user.includes("ANOTHER ANGLE REQUEST") || user.includes("SAVED POST(S)"))
         return { cards: [goodCard({ title: `Follow-up ${ideateRound}`, riff_type: "disagree", hook_template_used: `fu ${ideateRound}` })] };
       return { cards: [
         goodCard(),
@@ -56,6 +56,8 @@ test("ideate: generic card is caught, repaired once, and cards are written with 
   assert.deepEqual(first.meta.brain_refs, ["brain:sessions/2026-10/2026-10-12-quoting-bot#accomplished"], "model's loose ref snapped to the real note id");
   assert.ok(first.meta.sources.includes("substack:alpha"));
   assert.ok(first.meta.slack?.ts, "Slack message pointer recorded");
+  assert.equal(first.meta.content?.title, first.body.split("\n")[0].slice(2), "structured content stored alongside the markdown");
+  assert.equal(first.meta.format, "data");
   const prompt0 = JSON.stringify(fakeCalls[0].messages);
   for (const must of ["FACTS ABOUT THEIR WORK", "SEs in demos", "NEVER THE TOPIC", "RFPs", "Signals beat lists", "excerpt:"]) assert.ok(prompt0.includes(must), `ideation input includes ${must}`);
   assert.ok(!prompt0.includes("roadblocks"), "bug-note sections are not fed to ideation");
@@ -114,7 +116,9 @@ test("intake: a pasted Substack link is saved, credited +3, distilled, and riffe
   write(dir, "config/sources.yaml", fs.readFileSync(path.join(dir, "config/sources.yaml"), "utf8").replace("sources:\n", "sources:\n  - {id: substack:gamma, type: substack, url: https://gamma.substack.com, status: active, added_at: \"2026-10-01\", method: substack_api}\n"));
   const r = await intake({ text: "love this <https://gamma.substack.com/p/hello>", urls: ["https://gamma.substack.com/p/hello"], files: [], channel: "C0TEST0001", ts: "9.9" });
   assert.deepEqual(r.saved, ["substack:gamma.substack.com:77"]);
-  assert.equal(r.cards, 1);
+  assert.ok(r.cards >= 1);
+  const riffs = listCards("inbox").filter((c) => c.meta.seed?.startsWith("saved:")).map((c) => c.meta.riff_on);
+  assert.ok(riffs.length && riffs.every((x) => x === "substack:gamma.substack.com:77"), `saved-post cards riff on the saved post, got ${riffs}`);
   assert.equal(loadSources().sources.find((s) => s.id === "substack:gamma")!.pheromone.hits >= 3, true);
   assert.ok(loadHooks().some((h) => h.item_id === "substack:gamma.substack.com:77"));
   assert.ok(slackCalls("chat.postMessage").some((c) => c.body.thread_ts === "9.9"));
@@ -126,6 +130,10 @@ test("retro: memory rewritten without echoed headings; accepted rule reaches the
   const wp = fs.readFileSync(path.join(dir, "memory/winning-patterns.md"), "utf8");
   assert.equal((wp.match(/^# /gm) ?? []).length, 1, "single heading");
   assert.ok(!wp.includes("_stamp_"));
+  assert.equal((wp.match(/^- numbers$/gm) ?? []).length, 1, "markdown stripped and duplicates merged in code");
+  const avoid = fs.readFileSync(path.join(dir, "memory/rejected.md"), "utf8");
+  assert.match(avoid, /^- \[direct feedback\] RFPs as a topic\.$/m, "direct feedback survives even though the model dropped it");
+  assert.match(avoid, /^- plumbing$/m);
   const rule = loadProposals().find((p) => p.kind === "prompt_rule")!;
   assert.match(await decideProposal(rule.id, "accept"), /Accepted/);
   assert.match(prompt("ideate"), /Lead with the audience's problem\./);

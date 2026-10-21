@@ -30,6 +30,13 @@ export function detect(input: string): Detected | null {
     if (parts[1] === "status") return { type: "x", url: `https://x.com/${parts[0]}/status/${parts[2]}`, kind: "post", key: parts[2] };
     return null;
   }
+  // Substack profiles and app post links: substack.com/@handle, substack.com/@handle/p-<id>, substack.com/home/post/p-<id>
+  if (host === "substack.com") {
+    const postId = path.match(/\/p-(\d+)$/)?.[1];
+    if (postId) return { type: "substack", url: `https://substack.com/home/post/p-${postId}`, kind: "post", key: `postid:${postId}` };
+    const handle = path.match(/^\/@([^/]+)$/)?.[1];
+    if (handle) return { type: "substack", url: `https://substack.com/@${handle.toLowerCase()}`, kind: "source", key: handle.toLowerCase() };
+  }
   // Substack app/share links: open.substack.com/pub/<pub>/p/<slug> (iOS/Android share sheet) and /pub/<pub>
   if (host === "open.substack.com" || (host === "substack.com" && path.startsWith("/pub/"))) {
     const m = path.match(/^\/pub\/([^/]+)(?:\/p\/([^/]+))?/);

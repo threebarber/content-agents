@@ -29,6 +29,9 @@ test("detect classifies sources and posts", () => {
   const share = detect("https://open.substack.com/pub/gtmedownload/p/grok-bot-clay-x-use-cases?r=6grbfv&utm_medium=ios");
   assert.deepEqual([share?.kind, share?.url], ["post", "https://gtmedownload.substack.com/p/grok-bot-clay-x-use-cases"], "mobile share link is a post, not a source called 'open'");
   assert.equal(detect("https://open.substack.com/pub/gtmedownload")?.url, "https://gtmedownload.substack.com");
+  assert.deepEqual([detect("https://substack.com/@growthtwins")?.kind, detect("https://substack.com/@growthtwins")?.key], ["source", "growthtwins"], "profile link is a source");
+  assert.equal(detect("https://substack.com/home/post/p-200955295")?.key, "postid:200955295");
+  assert.equal(detect("https://substack.com/@growthtwins/p-200955295")?.kind, "post");
 });
 
 test("normalizeUrl strips www, query, trailing slash", () => {
@@ -117,6 +120,22 @@ test("markdown sections split on ## headings", () => {
 test("html to text and link extraction", () => {
   assert.equal(htmlToText("<p>a &amp; b</p><p>c</p>").text, "a & b\nc");
   assert.deepEqual(extractLinks('<a href="https://a.com/x?y=1">x</a>'), ["https://a.com/x"]);
+});
+
+test("free-text labels map onto fixed vocabularies", async () => {
+  const { normalizeFormat, normalizeRiffType } = await import("../schemas/card.ts");
+  assert.deepEqual(["Data!", "how-to", "Tutorial", "hot take", "Screenshot Commentary", "vibes"].map(normalizeFormat), ["data", "howto", "howto", "contrarian", "screenshotcommentary", "other"]);
+  assert.deepEqual(["react-to-data", "push back", "Disagree", "???"].map(normalizeRiffType), ["reacttodata", "disagree", "disagree", "extend"]);
+});
+
+test("card ids never collide", async () => {
+  const { cardId, writeCard } = await import("../src/agents/cards.ts");
+  const d = new Date("2026-10-21T12:00:00Z");
+  const a = cardId("Same title", d);
+  writeCard("inbox", { id: a } as never, "# Same title");
+  const b = cardId("Same title", d);
+  assert.notEqual(a, b);
+  assert.equal(b, `${a}-2`);
 });
 
 test("card body round-trips through the Slack parser", () => {

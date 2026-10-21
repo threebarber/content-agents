@@ -45,7 +45,24 @@ export function slugGuesses(name?: string, author?: string): string[] {
 }
 
 /** Resolve a source to a fetchable URL + method. Probes the given url first, then slug guesses. */
+/** substack.com/@handle → that person's primary publication home (via Substack's public profile API). */
+export async function substackHandleHome(handle: string): Promise<string | null> {
+  try {
+    const p = await getJson<{ primaryPublication?: { subdomain?: string; custom_domain?: string | null }; publicationUsers?: { publication: { subdomain: string; custom_domain: string | null } }[] }>(`https://substack.com/api/v1/user/${handle}/public_profile`);
+    const pub = p.primaryPublication?.subdomain ? p.primaryPublication : p.publicationUsers?.[0]?.publication;
+    if (!pub?.subdomain) return null;
+    return pub.custom_domain ? `https://${pub.custom_domain}` : `https://${pub.subdomain}.substack.com`;
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveSource(s: Source): Promise<Resolution> {
+  const handle = s.url?.match(/^https:\/\/substack\.com\/@([^/]+)$/)?.[1];
+  if (handle) {
+    const home = await substackHandleHome(handle);
+    if (home && (await isSubstackApi(home))) return { url: home, method: "substack_api" };
+  }
   const probes: string[] = [];
   if (s.url) probes.push(s.url.replace(/\/+$/, ""));
   if (s.type === "substack" || s.type === "rss") for (const g of slugGuesses(s.name, s.author)) probes.push(`https://${g}.substack.com`);

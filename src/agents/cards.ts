@@ -56,9 +56,27 @@ export function moveCard(card: Card, to: (typeof QUEUES)[number]): string {
   return dest;
 }
 
+/** Card id from date + title; a numeric suffix keeps two same-titled cards from overwriting each other. */
 export function cardId(title: string, date = new Date()): string {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
-  return `${date.toISOString().slice(0, 10)}-${slug}`;
+  const base = `${date.toISOString().slice(0, 10)}-${slug}`;
+  const taken = (id: string) => QUEUES.some((q) => fs.existsSync(statePath("queue", q, `${id}.md`)));
+  let id = base;
+  for (let n = 2; taken(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+/** Title / hook / angle / template from the card's structured content; markdown parsing only for older cards. */
+export function cardContent(card: Card): { title: string; hook: string; angle: string; template: string } {
+  const c = card.meta.content;
+  if (c) return { title: c.title, hook: c.hook, angle: c.angle, template: c.hook_template_used ?? "" };
+  const b = card.body;
+  return {
+    title: b.match(/^# (.+)$/m)?.[1] ?? "(untitled)",
+    hook: (b.match(/\*\*Hook\*\*\n\n((?:> .*\n?)+)/)?.[1] ?? "").replace(/^> ?/gm, "").trim(),
+    angle: b.match(/\*\*Angle:\*\* (.+)/)?.[1] ?? "",
+    template: b.match(/\*\*Template:\*\* (.+)/)?.[1] ?? "",
+  };
 }
 
 export function repoUrl(file: string): string | null {
