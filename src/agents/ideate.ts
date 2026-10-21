@@ -325,12 +325,13 @@ export async function ideateFromSaved(items: SavedItem[], note: string, thread?:
     item_id: i.id, source_id: i.source_id, author: i.author, title: i.title, url: i.url, published_at: i.published_at, engagement_z: null, hit: true,
     model: "", distilled_at: "", hook: (i.title ?? i.text.split("\n")[0]).slice(0, 200), hook_template: "", format: "other", topics: [], core_claim: "", why_it_worked: "", hook_quality: 3, relevance: 3,
   });
-  const background = swipeFile(21, 12).filter((h) => !items.some((i) => i.id === h.item_id));
+  // no other swipe-file posts here: ideas from a saved link come from that post plus the owner's own work only
+  const background: HookRecord[] = [];
   const notes = await workNotes(30, 15);
   const per = items.length > 1 ? 1 : 2;
   const n = Math.min(4, per * items.length);
   const saved = items.map((i) => `[${i.id}] ${i.author ?? "?"} — "${i.title ?? ""}" (❤️${i.metrics.likes ?? "?"} 💬${i.metrics.comments ?? "?"})\n${i.text.slice(0, 6000)}`).join("\n\n---\n\n");
-  const extra = `SAVED POST(S): THE SUBJECT OF THIS BATCH\nThe owner dropped ${items.length > 1 ? "these posts" : "this post"} into Slack${note ? ` with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${n} card(s). Every card must respond to a saved post above: set riff_on to its id (${items.map((i) => i.id).join(", ")}), and their_point to what that post specifically argued. Use the SWIPE FILE only as background for what else people are saying; do not riff on it. Pull evidence from the work notes where it fits. Use a different riff_type and hook move for each card.`;
+  const extra = `SAVED POST(S): THE SUBJECT OF THIS BATCH\nThe owner dropped ${items.length > 1 ? "these posts" : "this post"} into Slack${note ? ` with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${n} card(s). Every card must respond to a saved post above: set riff_on to its id (${items.map((i) => i.id).join(", ")}), and their_point to what that post specifically argued. Build each card from the saved post's own content (its claims, examples, numbers) plus the owner's work notes where they fit. Do not bring in other people's posts. Use a different riff_type and hook move for each card.`;
   const { cards, usd, run_id } = await generateChecked(render([...savedHooks, ...background], notes, extra), n, savedHooks);
   const files = cards.map((c, k) => {
     // enforce the subject: a card that wandered to another post is pointed back at the saved one

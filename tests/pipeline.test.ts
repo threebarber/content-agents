@@ -119,6 +119,8 @@ test("intake: a pasted Substack link is saved, credited +3, distilled, and riffe
   assert.ok(r.cards >= 1);
   const riffs = listCards("inbox").filter((c) => c.meta.seed?.startsWith("saved:")).map((c) => c.meta.riff_on);
   assert.ok(riffs.length && riffs.every((x) => x === "substack:gamma.substack.com:77"), `saved-post cards riff on the saved post, got ${riffs}`);
+  const savedPrompt = JSON.stringify(fakeCalls.find((c) => JSON.stringify(c.messages).includes("SAVED POST(S)"))!.messages);
+  assert.ok(!savedPrompt.includes("Signals beat lists"), "other people's posts are not in a saved-link prompt");
   assert.equal(loadSources().sources.find((s) => s.id === "substack:gamma")!.pheromone.hits >= 3, true);
   assert.ok(loadHooks().some((h) => h.item_id === "substack:gamma.substack.com:77"));
   assert.ok(slackCalls("chat.postMessage").some((c) => c.body.thread_ts === "9.9"));
