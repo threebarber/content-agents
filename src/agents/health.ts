@@ -77,7 +77,7 @@ export async function health(): Promise<Check[]> {
   add("Remembered", "memory files present", mem.every(([, f]) => fs.existsSync(f)) ? "ok" : "fail", memInfo.join(", "));
 
   // ---------- REFERENCED ----------
-  const recent = (["inbox", "approved", "rejected", "drafted"] as const).flatMap((q) => listCards(q)).filter((c) => ago(c.meta.created_at) < 7 * 24 * H);
+  const recent = (["inbox", "approved", "rejected", "drafted"] as const).flatMap((q) => listCards(q)).filter((c) => ago(c.meta.created_at) < 7 * 24 * H && !/^superseded/.test(c.meta.why ?? ""));
   const hookById = new Map(hooks.map((h) => [h.item_id, h]));
   const allRefs = recent.flatMap((c) => [c.meta.riff_on, ...c.meta.evidence, ...(c.meta.brain_refs ?? [])]).filter((x): x is string => !!x);
   const items = itemsById(allRefs);

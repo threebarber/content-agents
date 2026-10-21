@@ -25,4 +25,6 @@ export type HookRecord = HookExtraction & {
   hit: boolean;
   model: string;
   distilled_at: string;
+  /** set when the post was deliberately not distilled (e.g. the model declined it); never retried */
+  skipped?: string;
 };

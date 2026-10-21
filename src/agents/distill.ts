@@ -67,6 +67,17 @@ export async function distill(opts: { limit?: number; concurrency?: number; log?
         });
         const p = res.parsed_output;
         stats.usd += costUsd(MODELS.distill, res.usage);
+        if (!p && res.stop_reason === "refusal") {
+          // a post the model won't summarize is off-topic for us: record it as skipped (never retried) and as a miss
+          out.push({ item_id: it.id, source_id: it.source_id, author: it.author, title: it.title, url: it.url, published_at: it.published_at, engagement_z: null, hit: false, model: MODELS.distill, distilled_at: new Date().toISOString(), skipped: "model declined", hook: "", hook_template: "", format: "other", topics: [], core_claim: "", why_it_worked: "", hook_quality: 0, relevance: 0 });
+          const via = it.found_via?.startsWith("term:") ? terms.terms.find((t) => t.id === it.found_via) : undefined;
+          if (via) miss(via);
+          const src = sources.sources.find((s) => s.id === it.source_id);
+          if (src) miss(src);
+          stats.distilled++;
+          log(`skipped ${it.id}: model declined`);
+          continue;
+        }
         if (!p) throw new Error(`no parsed output (stop_reason=${res.stop_reason})`);
         const zval = ez == null || Number.isNaN(ez) ? null : Math.round(ez * 100) / 100;
         const engScore = (it.metrics.likes ?? 0) + 2 * (it.metrics.comments ?? 0);
@@ -78,7 +89,7 @@ export async function distill(opts: { limit?: number; concurrency?: number; log?
         // pheromone: the source, plus any active term the post's topics touch
         const src = sources.sources.find((s) => s.id === it.source_id);
         if (src) (isHit ? hit(src, 1, it.published_at) : miss(src, 1));
-        const via = it.found_via?.startsWith("term:") ? terms.terms.find((t) => t.id === it.found_via!.slice(5)) : undefined;
+        const via = it.found_via?.startsWith("term:") ? terms.terms.find((t) => t.id === it.found_via) : undefined;
         if (via) (isHit ? hit(via) : miss(via));
         const topicText = p.topics.join(" | ").toLowerCase();
         for (const t of terms.terms) if (t !== via && t.status === "active" && t.term.split(" ").every((w) => topicText.includes(w.toLowerCase()))) (isHit ? hit(t) : miss(t));

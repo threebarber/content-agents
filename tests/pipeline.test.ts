@@ -177,3 +177,22 @@ test("dedupe: re-pasting a link doesn't re-credit or re-riff; /ca source and pin
   assert.equal(loadTerms().terms.filter((t) => t.term.toLowerCase() === "gtm engineering").length, 1);
   assert.equal(loadSources().sources.length, n);
 });
+
+test("a post the model declines is recorded as skipped, counted as a miss, and never retried", async () => {
+  const month = new Date().toISOString().slice(0, 7);
+  fs.mkdirSync(path.join(dir, "data/items/x"), { recursive: true });
+  fs.appendFileSync(path.join(dir, `data/items/x/${month}.jsonl`), JSON.stringify({ id: "x:42", source_id: "x:someone", type: "x", url: "https://x.com/s/status/42", title: "off topic", author: "someone", published_at: iso(1), text: "off-topic tooling", text_truncated: false, metrics: { likes: 20, comments: 1, shares: 0, wordcount: 2 }, tags: [], paywalled: false, outbound_links: [], fetched_at: iso(0), found_via: "term:revops" }) + "\n");
+  const missesBefore = (await import("../src/registry/store.ts")).loadTerms().terms.find((t) => t.id === "term:revops")!.pheromone.misses;
+  const { setFakeLLM: set } = await import("../src/agents/llm.ts");
+  set(() => null); // parse returns no output…
+  const llm = await import("../src/agents/llm.ts");
+  const orig = llm.claude().messages.parse;
+  (llm.claude().messages as { parse: unknown }).parse = async (...a: unknown[]) => ({ ...(await (orig as (...x: unknown[]) => Promise<object>)(...a)), stop_reason: "refusal" });
+  const r = await distill({ limit: 50 });
+  (llm.claude().messages as { parse: unknown }).parse = orig;
+  assert.equal(r.failed, 0);
+  assert.equal(loadHooks().find((h) => h.item_id === "x:42")?.skipped, "model declined");
+  assert.equal((await import("../src/registry/store.ts")).loadTerms().terms.find((t) => t.id === "term:revops")!.pheromone.misses, missesBefore + 1);
+  fakeModel();
+  assert.equal((await distill({ limit: 50 })).distilled, 0, "not retried");
+});
