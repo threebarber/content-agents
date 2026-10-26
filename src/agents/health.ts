@@ -59,9 +59,11 @@ export async function health(): Promise<Check[]> {
   // ---------- REMEMBERED ----------
   const hooks = loadHooks();
   const hooked = new Set(hooks.map((h) => h.item_id));
-  const eligible = await withDb((q) => q(`SELECT id, source_id, found_via FROM items WHERE (type IN ('substack','linkedin','x') OR (type = 'rss' AND source_id NOT LIKE 'web:%')) AND NOT paywalled`));
+  const eligible = await withDb((q) => q(`SELECT * FROM items WHERE type IN ('substack','linkedin','x','rss') AND NOT paywalled`));
   const followed = new Set(reg.sources.filter((s) => ["active", "trial", "candidate"].includes(s.status)).map((s) => s.id));
-  const missing = eligible.filter((r) => (followed.has(String(r.source_id)) || r.found_via) && !hooked.has(String(r.id)));
+  const missing = eligible
+    .filter((r) => r.type !== "rss" || !String(r.source_id).startsWith("web:") || r.saved_by === "human")
+    .filter((r) => (followed.has(String(r.source_id)) || r.found_via || r.saved_by) && !hooked.has(String(r.id)));
   add("Remembered", "every post in the swipe file", missing.length > 20 ? "fail" : missing.length ? "warn" : "ok", missing.length ? `${missing.length} posts not distilled yet` : `${hooked.size} posts distilled, none missing`);
   const fb = readJsonl<{ card: string; verdict: string }>(statePath("data", "feedback.jsonl"));
   const fbCards = new Set(fb.map((f) => f.card));
@@ -81,7 +83,8 @@ export async function health(): Promise<Check[]> {
   const hookById = new Map(hooks.map((h) => [h.item_id, h]));
   const allRefs = recent.flatMap((c) => [c.meta.riff_on, ...c.meta.evidence, ...(c.meta.brain_refs ?? [])]).filter((x): x is string => !!x);
   const items = itemsById(allRefs);
-  const badRiff = recent.filter((c) => c.meta.riff_on && !(hookById.has(c.meta.riff_on) && items.get(c.meta.riff_on)?.url));
+  // a riff is valid when the post it points at is stored with a link (saved web articles may not be in the swipe file yet)
+  const badRiff = recent.filter((c) => c.meta.riff_on && !items.get(c.meta.riff_on)?.url);
   const badEvidence = recent.flatMap((c) => c.meta.evidence.filter((id) => !items.has(id)).map((id) => `${c.meta.id}→${id}`));
   const badNotes = recent.flatMap((c) => (c.meta.brain_refs ?? []).filter((id) => !items.has(id)).map((id) => `${c.meta.id}→${id}`));
   const riffed = recent.filter((c) => c.meta.riff_on).length;

@@ -147,6 +147,12 @@ test("health runs end to end on this state and catches a planted broken referenc
   const names = checks.map((c) => c.name);
   for (const n of ["every post in the swipe file", "every verdict recorded", "cards cite real posts", "idea generator receives memory"]) assert.ok(names.includes(n), n);
   assert.equal(checks.find((c) => c.name === "every verdict recorded")!.status, "ok");
+  // a saved web article (in items, not in the swipe file) is a valid riff target
+  const month = new Date().toISOString().slice(0, 7);
+  fs.mkdirSync(path.join(dir, "data/items/rss"), { recursive: true });
+  fs.appendFileSync(path.join(dir, `data/items/rss/${month}.jsonl`), JSON.stringify({ id: "web:blog-post", source_id: "web:blog.example", type: "rss", url: "https://blog.example/post", title: "A blog", author: "blog.example", published_at: iso(1), text: "body", text_truncated: false, metrics: { likes: null, comments: null, shares: null, wordcount: 1 }, tags: [], paywalled: false, outbound_links: [], fetched_at: iso(0), saved_by: "human" }) + "\n");
+  card("c-web", { riff_on: "web:blog-post", evidence: ["web:blog-post"] });
+  assert.equal((await health()).find((c) => c.name === "cards cite real posts")!.status, "ok", "saved web article counts as real");
   card("c-broken", { riff_on: "substack:nope:404", evidence: ["substack:nope:404"] });
   checks = await health();
   assert.equal(checks.find((c) => c.name === "cards cite real posts")!.status, "fail");

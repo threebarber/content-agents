@@ -337,6 +337,7 @@ export async function ideateFromSaved(items: SavedItem[], note: string, thread?:
     // enforce the subject: a card that wandered to another post is pointed back at the saved one
     if (!items.some((i) => i.id === c.riff_on)) c.riff_on = items[k % items.length].id;
     if (!c.evidence.some((e) => e.item_id === c.riff_on)) c.evidence.unshift({ item_id: c.riff_on!, why: "saved by the owner" });
+    if (/original/i.test(c.riff_type)) c.riff_type = "apply"; // it responds to the saved post, so it can't be "original"
     const meta = toMeta(c, [...savedHooks, ...background], run_id, `saved:${c.riff_on}`, notes.map((x) => x.id));
     return writeCard("inbox", meta, cardBody(c));
   });
