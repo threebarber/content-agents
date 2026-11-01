@@ -30,6 +30,7 @@ export const Source = z.object({
   pheromone: Pheromone.prefault({}),
   trial: z.object({ started_at: z.string(), hits: z.number().default(0) }).optional(),
   last_pulled_at: z.string().nullable().default(null),
+  canonical_host: z.string().optional(), // where the newsletter's address actually lands (dedupes custom domains)
   notes: z.string().optional(),
 });
 export type Source = z.infer<typeof Source>;

@@ -154,3 +154,10 @@ test("Substack responses: old array, new {posts,nextCursor}, anything else is an
   assert.deepEqual(substackPage({ posts: [{ id: 2 }], nextCursor: "abc" }, "u"), { posts: [{ id: 2 }], nextCursor: "abc" });
   assert.throws(() => substackPage({ error: "nope" }, "u"), /unexpected Substack response/);
 });
+
+test("the same Substack post under two addresses is stored once", async () => {
+  const { writeItems } = await import("../src/lib/jsonl.ts");
+  const base = { source_id: "substack:x", type: "substack" as const, url: "u", title: "t", author: null, published_at: new Date().toISOString(), text: "x", text_truncated: false, metrics: { likes: 1, comments: 0, shares: 0, wordcount: 1 }, tags: [], paywalled: false, outbound_links: [], fetched_at: new Date().toISOString() };
+  assert.equal(writeItems([{ ...base, id: "substack:x.substack.com:999001" }]), 1);
+  assert.equal(writeItems([{ ...base, id: "substack:www.x.com:999001" }]), 0);
+});

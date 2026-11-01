@@ -40,13 +40,24 @@ export async function health(): Promise<Check[]> {
   }
   // volume: a source type that suddenly brings in far less than usual is broken, even if it's not zero
   const weekly = await withDb((q) =>
-    q(`SELECT type, count(*) FILTER (WHERE fetched_at::TIMESTAMP >= now() - INTERVAL 7 DAY) AS this_week,
-              count(*) FILTER (WHERE fetched_at::TIMESTAMP < now() - INTERVAL 7 DAY AND fetched_at::TIMESTAMP >= now() - INTERVAL 28 DAY) / 3.0 AS prior_avg
+    q(`SELECT type, count(*) FILTER (WHERE published_at::TIMESTAMP >= now() - INTERVAL 7 DAY) AS this_week,
+              count(*) FILTER (WHERE published_at::TIMESTAMP < now() - INTERVAL 7 DAY AND published_at::TIMESTAMP >= now() - INTERVAL 28 DAY) / 3.0 AS prior_avg
        FROM items WHERE source_id <> 'brain' AND (found_via IS NULL OR found_via NOT LIKE 'saved:%') GROUP BY type`),
   ).catch(() => [] as Record<string, unknown>[]);
-  for (const r of weekly) {
+  // LinkedIn/X are pulled twice a week, so compare the last social run's new posts with the runs before it
+  const social = runs.filter((r) => r.task === "ingest-social" && r.ok).slice(-5);
+  if (social.length >= 3) {
+    const last = social.at(-1)!.stats, before = social.slice(0, -1);
+    for (const t of ["linkedin", "x"] as const) {
+      const now = Number(last[t] ?? 0), prior = before.reduce((a, r) => a + Number(r.stats[t] ?? 0), 0) / before.length;
+      if (prior < 10) continue;
+      const ratio = now / prior;
+      add("Pulled", `${t} volume vs usual`, ratio < 0.3 ? "fail" : ratio < 0.6 ? "warn" : "ok", `${now} new last run vs ~${Math.round(prior)} per run before${ratio < 0.3 ? " — a pull is probably failing quietly" : ""}`);
+    }
+  }
+  for (const r of weekly.filter((w) => w.type === "substack")) {
     const now = Number(r.this_week), prior = Number(r.prior_avg);
-    if (prior < 20) continue;
+    if (prior < 10) continue;
     const ratio = now / prior;
     add("Pulled", `${r.type} volume vs usual`, ratio < 0.3 ? "fail" : ratio < 0.6 ? "warn" : "ok", `${now} this week vs ~${Math.round(prior)}/week before${ratio < 0.3 ? " — a pull is probably failing quietly" : ""}`);
   }

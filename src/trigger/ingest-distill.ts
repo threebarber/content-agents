@@ -2,7 +2,7 @@ import { schedules, logger } from "@trigger.dev/sdk";
 import { logRun } from "../lib/runlog.js";
 import { tokenTally } from "../agents/llm.js";
 import { checkoutState, commitState, stateToken } from "../lib/state-repo.js";
-import { loadSources, saveSources, loadForaging, loadBudget } from "../registry/store.js";
+import { loadSources, saveSources, loadForaging, loadBudget, dedupeNewsletters } from "../registry/store.js";
 import { allocate } from "../registry/thompson.js";
 import { decay } from "../registry/pheromone.js";
 import { pullSubstack } from "../ingest/substack.js";
@@ -33,6 +33,9 @@ export const ingestDistill = schedules.task({
     const f = loadSources();
     const fo = loadForaging();
     const b = loadBudget();
+    // merge newsletters followed under two addresses before pulling
+    const merged = await dedupeNewsletters(f);
+    if (merged.length) logger.info("merged duplicate newsletters", { merged });
     // weekly evaporation (idempotent)
     const decayed = f.sources.filter((s) => decay(s, fo)).length;
 

@@ -98,3 +98,45 @@ export async function findExisting(f: SourcesFile, id: string, url: string | nul
     return undefined;
   }
 }
+
+/**
+ * Newsletter sources reachable at two addresses (x.substack.com vs its custom domain) are merged: each source's real
+ * host is resolved once (cached as canonical_host) and a later duplicate is retired, its score folded into the original.
+ */
+export async function dedupeNewsletters(f: SourcesFile): Promise<string[]> {
+  const retired: string[] = [];
+  for (const s of f.sources) {
+    if (s.type !== "substack" || !s.url || s.canonical_host || s.status === "retired") continue;
+    // the canonical_url Substack puts on posts is the newsletter's real address (redirects are not reliable)
+    try {
+      let r: Response | null = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        r = await fetch(`${s.url.replace(/\/+$/, "")}/api/v1/posts?limit=1`, { headers: { "user-agent": "Mozilla/5.0", accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
+        if (r.status !== 429) break;
+        await new Promise((res) => setTimeout(res, 2000 * 2 ** attempt)); // Substack throttles bursts
+      }
+      await new Promise((res) => setTimeout(res, 300)); // stay under the burst limit
+      if (!r?.ok) continue;
+      const raw = (await r.json()) as unknown;
+      const posts = (Array.isArray(raw) ? raw : (raw as { posts?: unknown[] })?.posts ?? []) as { canonical_url?: string }[];
+      s.canonical_host = new URL(posts[0]?.canonical_url ?? r.url).host.replace(/^www\./, "");
+    } catch {}
+  }
+  const byHost = new Map<string, Source>();
+  for (const s of f.sources) {
+    if (!s.canonical_host || s.status === "retired") continue;
+    const keep = byHost.get(s.canonical_host);
+    if (!keep) {
+      byHost.set(s.canonical_host, s);
+      continue;
+    }
+    const [orig, dup] = keep.status === "active" || keep.added_at <= s.added_at ? [keep, s] : [s, keep];
+    orig.pheromone.hits += dup.pheromone.hits;
+    orig.pheromone.misses += dup.pheromone.misses;
+    dup.status = "retired";
+    dup.notes = `${dup.notes ?? ""} [duplicate of ${orig.id}: same newsletter at ${s.canonical_host}]`.trim();
+    byHost.set(s.canonical_host, orig);
+    retired.push(`${dup.id}→${orig.id}`);
+  }
+  return retired;
+}

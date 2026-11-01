@@ -38,11 +38,18 @@ export function existingItemIds(type: string): Set<string> {
 }
 
 /** Write items, bucketed by published month, skipping ids already present. Returns count written. */
+const substackNum = (id: string) => (id.startsWith("substack:") ? id.split(":").pop()! : null);
+
 export function writeItems(items: Item[]): number {
   const byFile = new Map<string, Item[]>();
   const seen = new Map<string, Set<string>>();
+  // a newsletter reachable at two addresses (x.substack.com and its custom domain) yields the same post twice
+  const substackNums = items.some((i) => i.type === "substack") ? new Set([...existingItemIds("substack")].map(substackNum)) : new Set<string | null>();
   let n = 0;
   for (const it of items) {
+    const num = substackNum(it.id);
+    if (num && substackNums.has(num)) continue;
+    if (num) substackNums.add(num);
     const f = itemsFile(it.type, it.published_at);
     if (!seen.has(f)) seen.set(f, new Set(readJsonl<Item>(f).map((x) => x.id)));
     if (seen.get(f)!.has(it.id)) continue;
