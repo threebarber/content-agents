@@ -147,3 +147,10 @@ test("card body round-trips through the Slack parser", () => {
   assert.equal(p.angle, "your take");
   assert.equal(p.template, "the stat line");
 });
+
+test("Substack responses: old array, new {posts,nextCursor}, anything else is an error", async () => {
+  const { substackPage } = await import("../src/ingest/substack.ts");
+  assert.deepEqual(substackPage([{ id: 1 }], "u"), { posts: [{ id: 1 }], nextCursor: null });
+  assert.deepEqual(substackPage({ posts: [{ id: 2 }], nextCursor: "abc" }, "u"), { posts: [{ id: 2 }], nextCursor: "abc" });
+  assert.throws(() => substackPage({ error: "nope" }, "u"), /unexpected Substack response/);
+});

@@ -6,8 +6,8 @@ export type Resolution = { url: string; method: string } | null;
 
 async function isSubstackApi(home: string): Promise<boolean> {
   try {
-    const posts = await getJson<unknown[]>(`${home}/api/v1/posts?limit=1`);
-    return Array.isArray(posts);
+    const raw = await getJson<unknown>(`${home}/api/v1/posts?limit=1`);
+    return Array.isArray(raw) || Array.isArray((raw as { posts?: unknown })?.posts);
   } catch {
     return false;
   }

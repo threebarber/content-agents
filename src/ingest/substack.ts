@@ -32,13 +32,15 @@ export async function pullSubstack(source: Source, opts: PullOpts = {}): Promise
   const pageSize = Math.min(50, max);
   const fetchedAt = new Date().toISOString();
 
+  let cursor: string | null = null;
   for (let offset = 0; out.length < max; offset += pageSize) {
     const path =
       opts.sort === "top"
         ? `${home}/api/v1/archive?sort=top&limit=${pageSize}&offset=${offset}`
-        : `${home}/api/v1/posts?limit=${pageSize}&offset=${offset}`;
-    const page = await getJson<SubstackPost[]>(path);
-    if (!Array.isArray(page) || page.length === 0) break;
+        : `${home}/api/v1/posts?limit=${pageSize}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : offset ? `&offset=${offset}` : ""}`;
+    const { posts: page, nextCursor } = substackPage(await getJson<unknown>(path), path);
+    cursor = nextCursor;
+    if (page.length === 0) break;
     let stop = false;
     for (const p of page) {
       const ts = new Date(p.post_date).getTime();
@@ -49,9 +51,22 @@ export async function pullSubstack(source: Source, opts: PullOpts = {}): Promise
       out.push(toItem(source, p, fetchedAt));
       if (out.length >= max) break;
     }
-    if (stop || page.length < pageSize) break;
+    if (stop || (!cursor && page.length < pageSize)) break;
   }
   return out;
+}
+
+/**
+ * Substack returns either a bare array (old API, still used for offset/archive requests) or
+ * { posts, nextCursor } (new API, since 2026-10). Anything else is an error, never an empty page.
+ */
+export function substackPage(raw: unknown, url: string): { posts: SubstackPost[]; nextCursor: string | null } {
+  if (Array.isArray(raw)) return { posts: raw as SubstackPost[], nextCursor: null };
+  if (raw && typeof raw === "object" && Array.isArray((raw as { posts?: unknown }).posts)) {
+    const r = raw as { posts: SubstackPost[]; nextCursor?: string | null };
+    return { posts: r.posts, nextCursor: r.nextCursor ?? null };
+  }
+  throw new Error(`unexpected Substack response from ${url}: ${JSON.stringify(raw).slice(0, 120)}`);
 }
 
 export function toItem(source: Source, p: SubstackPost, fetchedAt: string): Item {

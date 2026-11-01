@@ -38,6 +38,18 @@ export async function health(): Promise<Check[]> {
     const r = byType.get(t);
     add("Pulled", `${t} posts this week`, r && Number(r.n) > 0 ? "ok" : "fail", r ? `${r.n} new, last fetched ${fmtAgo(Date.now() - Number(r.last_ms))}` : "nothing fetched in 7 days");
   }
+  // volume: a source type that suddenly brings in far less than usual is broken, even if it's not zero
+  const weekly = await withDb((q) =>
+    q(`SELECT type, count(*) FILTER (WHERE fetched_at::TIMESTAMP >= now() - INTERVAL 7 DAY) AS this_week,
+              count(*) FILTER (WHERE fetched_at::TIMESTAMP < now() - INTERVAL 7 DAY AND fetched_at::TIMESTAMP >= now() - INTERVAL 28 DAY) / 3.0 AS prior_avg
+       FROM items WHERE source_id <> 'brain' AND (found_via IS NULL OR found_via NOT LIKE 'saved:%') GROUP BY type`),
+  ).catch(() => [] as Record<string, unknown>[]);
+  for (const r of weekly) {
+    const now = Number(r.this_week), prior = Number(r.prior_avg);
+    if (prior < 20) continue;
+    const ratio = now / prior;
+    add("Pulled", `${r.type} volume vs usual`, ratio < 0.3 ? "fail" : ratio < 0.6 ? "warn" : "ok", `${now} this week vs ~${Math.round(prior)}/week before${ratio < 0.3 ? " — a pull is probably failing quietly" : ""}`);
+  }
   const reg = loadSources();
   const active = reg.sources.filter((s) => s.status === "active");
   const staleDaily = active.filter((s) => (s.method === "substack_api" || s.method === "sitemap") && ago(s.last_pulled_at) > 30 * H);

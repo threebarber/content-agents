@@ -249,3 +249,12 @@ test("short links are expanded before they're classified", async () => {
   assert.equal(detect(target)?.kind, "post");
   assert.equal(detect(target)?.type, "linkedin");
 });
+
+test("pullSubstack follows the new cursor format across pages", async () => {
+  const { pullSubstack } = await import("../src/ingest/substack.ts");
+  const post = (id: number, days: number) => ({ id, title: `p${id}`, slug: `p${id}`, canonical_url: `https://delta.substack.com/p/p${id}`, post_date: iso(days), audience: "everyone", reactions: { "❤": 1 }, comment_count: 0, body_html: "<p>x</p>" });
+  routes.push({ match: /delta\.substack\.com\/api\/v1\/posts\?limit=\d+$/, reply: () => ({ posts: [post(1, 1), post(2, 2)], nextCursor: "c1" }) });
+  routes.push({ match: /delta\.substack\.com\/api\/v1\/posts\?limit=\d+&cursor=c1/, reply: () => ({ posts: [post(3, 3)], nextCursor: null }) });
+  const items = await pullSubstack({ id: "substack:delta", type: "substack", url: "https://delta.substack.com", status: "active", tags: [], added_by: "human", added_at: "2026-10-01", discovered_via: "seed", method: "substack_api", budget_tier: "cheap", pheromone: { hits: 0, misses: 0, last_hit_at: null, decayed_at: null }, last_pulled_at: null } as never, { max: 10 });
+  assert.deepEqual(items.map((i) => i.title), ["p1", "p2", "p3"]);
+});

@@ -18,7 +18,8 @@ export async function verifySubstack(s: Source): Promise<Verification> {
     if (og) title = og;
   } catch {}
   try {
-    const posts = await getJson<{ publishedBylines?: { name: string }[] }[]>(`${s.url}/api/v1/posts?limit=3`);
+    const raw = await getJson<unknown>(`${s.url}/api/v1/posts?limit=3`);
+    const posts = (Array.isArray(raw) ? raw : (raw as { posts?: unknown[] })?.posts ?? []) as { publishedBylines?: { name: string }[] }[];
     byline = posts.find((p) => p.publishedBylines?.[0]?.name)?.publishedBylines?.[0]?.name ?? null;
   } catch {}
   const expectName = tokens(s.name ?? "");
