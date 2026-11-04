@@ -10,6 +10,7 @@ import { cardBody, cardId, listCards, writeCard, repoUrl, type Card } from "./ca
 import { withDb } from "../lib/duckdb.js";
 import { loadBudget } from "../registry/store.js";
 import { postCards } from "./slack-cards.js";
+import { judgeCards, WORTH_MIN, type Worth } from "./judge.js";
 import type { HookRecord } from "../../schemas/hook.js";
 import { readJsonl } from "../lib/jsonl.js";
 import { itemsById } from "../lib/items.js";
@@ -210,6 +211,9 @@ const callModel = traceable(
   { name: "ideate", run_type: "chain" },
 );
 
+/** The editor's score for each card, attached when the card is written. */
+const worthOf = new WeakMap<CardDraft, Worth>();
+
 function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: string | null, noteIds: string[] = []): CardMeta {
   // ids the model cites are checked against stored items: anything that doesn't exist is dropped, never stored
   const cited = [...new Set([...(d.riff_on ? [d.riff_on] : []), ...d.evidence.map((e) => e.item_id)])];
@@ -241,6 +245,7 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
     published_url: "",
     hook_breakdown: d.hook_breakdown,
     hook_move: d.hook_move,
+    ...(worthOf.has(d) ? { worth: worthOf.get(d) } : {}),
     riff_on: d.riff_on,
     riff_type: d.riff_type,
     their_point: d.their_point,
@@ -331,6 +336,13 @@ async function generateChecked(user: Rendered, n: number, hooks: HookRecord[], f
   let cards = first.cards;
   let usd = first.usd;
   const issues = verifyCards(cards, hooks, Math.ceil(n / 2));
+  // editor pass: deterministic checks catch the shape, this catches ideas that aren't worth writing
+  const judged = await judgeCards(cards).catch((e) => (console.error(`judge failed: ${(e as Error).message}`), { worth: new Map<number, Worth>(), usd: 0 }));
+  usd += judged.usd;
+  for (const [i, w] of judged.worth) {
+    worthOf.set(cards[i], w);
+    if (w.score < WORTH_MIN) issues.set(i, [...(issues.get(i) ?? []), `not worth writing about (${w.score}/5): ${w.reason}${w.fix ? ` To fix: ${w.fix}` : ""}`]);
+  }
   if (!issues.size) return { cards, usd, run_id: first.run_id, repaired: 0 };
   const flagged = [...issues.keys()];
   const keep = cards.filter((_, i) => !issues.has(i));
@@ -341,7 +353,14 @@ async function generateChecked(user: Rendered, n: number, hooks: HookRecord[], f
     n: flagged.length,
   });
   usd += repair.usd;
-  cards = [...keep, ...repair.cards.slice(0, flagged.length)];
+  // replacements are graded too; one that still isn't worth writing is dropped rather than posted
+  const fresh = repair.cards.slice(0, flagged.length);
+  const again = await judgeCards(fresh).catch(() => ({ worth: new Map<number, Worth>(), usd: 0 }));
+  usd += again.usd;
+  for (const [i, w] of again.worth) worthOf.set(fresh[i], w);
+  const kept = fresh.filter((_, i) => (again.worth.get(i)?.score ?? WORTH_MIN) >= WORTH_MIN);
+  if (kept.length < fresh.length) console.error(`ideate: dropped ${fresh.length - kept.length} card(s) still not worth writing after repair`);
+  cards = [...keep, ...kept];
   return { cards, usd, run_id: first.run_id, repaired: flagged.length };
 }
 

@@ -8,6 +8,7 @@ import { statePath, codeDir } from "../lib/paths.js";
 export const MODELS = {
   distill: process.env.DISTILL_MODEL || "claude-haiku-5-5",
   ideate: process.env.IDEATE_MODEL || "claude-opus-5-5",
+  judge: process.env.JUDGE_MODEL || "claude-sonnet-5-5",
 };
 
 let client: Anthropic | null = null;

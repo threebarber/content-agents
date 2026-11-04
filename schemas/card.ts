@@ -65,6 +65,8 @@ export type CardMeta = {
   slack?: { channel: string; ts: string };
   hook_breakdown?: string;
   hook_move?: string;
+  /** the editor pass: is this worth writing about? (1-5) */
+  worth?: { score: number; reason: string; fix: string };
   /** The structured card as generated (normalized). Slack, drafts, and the retro read this, not the markdown. */
   content?: CardDraft;
   riff_on?: string | null;

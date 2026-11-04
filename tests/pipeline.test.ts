@@ -19,6 +19,8 @@ const { health } = await import("../src/agents/health.ts");
 
 /** One fake model for every stage, chosen by the requested output schema. */
 let ideateRound = 0;
+/** what the fake editor scores each card (by hook text); anything unlisted gets a 4 */
+const judgeLow = new Map<string, number>();
 function fakeModel() {
   setFakeLLM((r) => {
     const user = JSON.stringify(r.messages);
@@ -26,6 +28,10 @@ function fakeModel() {
     if (r.schemaKeys.includes("draft")) return { draft: "para one\n\npara two", notes: "- check the number" };
     if (r.schemaKeys.includes("breakdown")) return { breakdown: "a number" };
     if (r.schemaKeys.includes("summary")) return { summary: ["rejects plumbing"], winning_patterns: ["# What works", "_stamp_", "- numbers", "1. numbers"], rejected_patterns: ["- plumbing"], prompt_rules: [{ prompt: "ideate", rule: "Lead with the audience's problem.", evidence: "2 rejects" }] };
+    if (r.schemaKeys.includes("verdicts")) {
+      const hooks = [...user.matchAll(/hook: (.*?)\\n/g)].map((m) => m[1]);
+      return { verdicts: hooks.map((h, i) => ({ card: i + 1, worth: judgeLow.get(h) ?? 4, reason: judgeLow.has(h) ? "a check crying wolf is not a post" : "solid", fix: "" })) };
+    }
     if (r.schemaKeys.includes("cards")) {
       ideateRound++;
       if (user.includes("REVISION REQUIRED")) return { cards: [goodCard({ title: "Repaired card", hook: "3 SEs, 1 Slack bot, 30 minutes.", riff_on: "linkedin:999", hook_template_used: "fixed move", brain_refs: [] })] };
@@ -221,7 +227,7 @@ test("scheduled batch path: Batch API first pass at half price; prompt cache bre
   assert.ok(!content[0].text.includes("ALREADY COVERED"), "changing data stays out of the cached block");
   assert.match(content[1].text, /ALREADY COVERED[\s\S]*Write 2 cards\./);
   // first pass billed at batch rates, repair at normal rates: 1000 in / 200 out on Opus → $0.008 normal, $0.004 batch
-  assert.equal(llm.tokenTally.usd.toFixed(4), (0.004 + 0.008).toFixed(4));
+  assert.equal(llm.tokenTally.usd.toFixed(4), (0.004 + 0.008 + 2 * 0.004).toFixed(4)); // + the editor grading the batch and the repair (Sonnet)
   assert.equal(llm.costUsd("claude-opus-5-5", { input_tokens: 1000, output_tokens: 0, cache_read_input_tokens: 10000, cache_creation_input_tokens: 0 }).toFixed(4), "0.0080");
 });
 
@@ -257,4 +263,21 @@ test("pullSubstack follows the new cursor format across pages", async () => {
   routes.push({ match: /delta\.substack\.com\/api\/v1\/posts\?limit=\d+&cursor=c1/, reply: () => ({ posts: [post(3, 3)], nextCursor: null }) });
   const items = await pullSubstack({ id: "substack:delta", type: "substack", url: "https://delta.substack.com", status: "active", tags: [], added_by: "human", added_at: "2026-10-01", discovered_via: "seed", method: "substack_api", budget_tier: "cheap", pheromone: { hits: 0, misses: 0, last_hit_at: null, decayed_at: null }, last_pulled_at: null } as never, { max: 10 });
   assert.deepEqual(items.map((i) => i.title), ["p1", "p2", "p3"]);
+});
+
+test("editor pass: a card not worth writing is sent back, and a replacement that still fails is dropped", async () => {
+  judgeLow.set("I tracked 47 buying signals in Clay last month. 1 changed a deal.", 2);
+  judgeLow.set("3 SEs, 1 Slack bot, 30 minutes.", 1);
+  try {
+    const before = listCards("inbox").length;
+    const r = await ideate({ n: 2, post: false });
+    const judgeCalls = fakeCalls.filter((c) => c.schemaKeys.includes("verdicts"));
+    assert.equal(judgeCalls.length, 2, "batch graded, then the replacements graded");
+    const repair = fakeCalls.find((c) => JSON.stringify(c.messages).includes("REVISION REQUIRED"))!;
+    assert.match(JSON.stringify(repair.messages), /not worth writing about \(2\/5\): a check crying wolf/);
+    assert.equal(r.files.length, 0, "both originals failed review and the repaired card still wasn't worth writing");
+    assert.equal(listCards("inbox").length, before);
+  } finally {
+    judgeLow.clear();
+  }
 });

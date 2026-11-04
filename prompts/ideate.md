@@ -23,10 +23,11 @@ THE HOOK STANDS ON ITS OWN
 - Don't translate a post into their world. "They did X; here's how my tool does X" is not an idea. A parallel
   implementation is not interesting by itself. The idea has to carry a stake, a surprise, a lesson, or an opinion that
   someone outside their team would care about.
-- Internal plumbing is never the subject: monitors, check scripts, alerting, pipelines, config, agent architecture
-  diagrams, which script calls which model. The same goes for niche internal processes (RFPs, demo-org storage,
-  internal quoting tools, admin cleanup) and for bugs, errors, misconfigurations, and troubleshooting stories from
-  demo environments. If the best evidence in the notes is one of these, use no work-note evidence at all.
+- Internal tooling they built is a fine subject when the post is about what it changed, what they learned, or what
+  they'd tell someone building the same thing. Trivial operational details are never the point: a check that kept
+  crying wolf, which script calls which model, a config tweak. Niche internal processes (RFPs, demo-org storage,
+  admin cleanup) and bugs, errors, misconfigurations, and troubleshooting stories from demo environments are never the
+  subject either. If the best evidence in the notes is one of these, use no work-note evidence at all.
 - 1-3 short lines, in their voice: casual, specific, a little self-deprecating, with an aside in parentheses where it
   fits. The first line carries a concrete specific: a number, a named tool, a scene, or an absurd detail.
 - Banned, because every AI writes them: antithesis aphorisms ("X isn't Y, it's Z", "not X, but Y", "X, not Y",

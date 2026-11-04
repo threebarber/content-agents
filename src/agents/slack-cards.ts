@@ -120,6 +120,7 @@ export function cardBlocks(card: Card): Block[] {
   if (angle) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Your angle*\n${angle}`.slice(0, 2900) } });
   if (sources.length) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Also drawing on*\n${sources.join("\n")}`.slice(0, 2900) } });
   if (notes) blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `From your work notes: ${notes}` }] });
+  if (m.worth) blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `🧭 *Worth writing ${m.worth.score}/5* · ${m.worth.reason}`.slice(0, 2900) }] });
   blocks.push({
     type: "actions",
     block_id: `card:${m.id}`.slice(0, 255),
