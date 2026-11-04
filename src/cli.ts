@@ -12,7 +12,7 @@ import { loadBrainConfig, pullBrain } from "./ingest/brain.js";
 import { statePath } from "./lib/paths.js";
 import { withDb, TOP_BY_Z } from "./lib/duckdb.js";
 import { postMessage, sections } from "./lib/slack.js";
-import { distill, loadHooks } from "./agents/distill.js";
+import { distill, loadHooks, regradeRelevance } from "./agents/distill.js";
 import { ideate } from "./agents/ideate.js";
 import { sweepFeedback } from "./agents/feedback.js";
 import { postCards } from "./agents/slack-cards.js";
@@ -340,6 +340,15 @@ program
   .action(async (o) => {
     const r = await distill({ limit: Number(o.limit), concurrency: Number(o.concurrency), log: console.error });
     console.log(`distilled ${r.distilled} (${r.hits} hits, ${r.failed} failed) for $${r.usd.toFixed(4)}`);
+  });
+
+program
+  .command("regrade")
+  .description("re-score recent posts' relevance with the current rubric (Haiku) and take back hits that no longer qualify")
+  .option("--days <n>", "", "30")
+  .action(async (o) => {
+    const r = await regradeRelevance({ days: Number(o.days), log: console.error });
+    console.log(`checked ${r.checked}, lowered ${r.lowered}, ${r.unhit} no longer hits, $${r.usd.toFixed(4)}`);
   });
 
 program

@@ -23,7 +23,7 @@
         "command": "/ca",
         "url": "https://content-agents-slack.dvtdropshot.workers.dev/slack/commands",
         "description": "content-agents: pin terms, follow sources, ideate now",
-        "usage_hint": "pin <term> | unpin <term> | terms | source <url> | ideate | help",
+        "usage_hint": "terms | pin <term> | unpin <term> | drop <term> | source <url> | ideate | health | help",
         "should_escape": false
       }
     ]

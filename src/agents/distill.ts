@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { claude, MODELS, prompt, tally } from "./llm.js";
+import { z } from "zod";
 import { HookExtraction, type HookRecord } from "../../schemas/hook.js";
 import { normalizeFormat, normalizeHookMove } from "../../schemas/card.js";
 import type { Item } from "../../schemas/item.js";
@@ -119,4 +120,59 @@ export async function distill(opts: { limit?: number; concurrency?: number; log?
 
 export function ensureFile(f: string) {
   if (!fs.existsSync(f)) fs.writeFileSync(f, "");
+}
+
+const Regrade = z.object({ grades: z.array(z.object({ id: z.string(), relevance: z.number().int().min(1).max(5) })) });
+
+/**
+ * Re-score relevance for recent posts with the current rubric (cheap: one Haiku call per 40 posts, hook + claim only).
+ * A post that drops below the bar stops being a hit, and the source and search term that found it get the hit taken back.
+ */
+export async function regradeRelevance(opts: { days?: number; log?: (m: string) => void } = {}): Promise<{ checked: number; lowered: number; unhit: number; usd: number }> {
+  const log = opts.log ?? (() => {});
+  const since = Date.now() - (opts.days ?? 30) * 86400000;
+  const all = loadHooks();
+  const pool = all.filter((h) => !h.skipped && h.relevance >= 3 && new Date(h.published_at).getTime() >= since);
+  const lines = prompt("distill").split("\n");
+  const start = lines.findIndex((l) => l.startsWith("- `relevance`"));
+  const end = lines.findIndex((l) => l.startsWith("- Be terse"));
+  const rubric = lines.slice(start, end).join("\n");
+  const sources = loadSources();
+  const terms = loadTerms();
+  const rows = await withDb((q) => q(`SELECT id, found_via FROM items`)).catch(() => []);
+  const via = new Map(rows.map((r) => [String(r.id), r.found_via == null ? null : String(r.found_via)]));
+  let usd = 0, lowered = 0, unhit = 0;
+  for (let i = 0; i < pool.length; i += 40) {
+    const chunk = pool.slice(i, i + 40);
+    const res = await claude().messages.parse({
+      model: MODELS.distill,
+      max_tokens: 3000,
+      system: `Grade each post's relevance from 1 to 5.\n${rubric}`,
+      output_config: { format: zodOutputFormat(Regrade) },
+      messages: [{ role: "user", content: chunk.map((h) => `[${h.item_id}] ${h.author}: ${h.hook.replace(/\s+/g, " ").slice(0, 200)}\n  claim: ${h.core_claim}\n  topics: ${h.topics.join(", ")}`).join("\n\n") }],
+    });
+    usd += tally(MODELS.distill, res.usage);
+    const grade = new Map((res.parsed_output?.grades ?? []).map((g) => [g.id, g.relevance]));
+    for (const h of chunk) {
+      const r = grade.get(h.item_id);
+      if (r == null || r >= h.relevance) continue;
+      lowered++;
+      const wasHit = h.hit;
+      h.relevance = r;
+      if (wasHit && r < 3) {
+        h.hit = false;
+        unhit++;
+        for (const x of [sources.sources.find((s) => s.id === h.source_id), terms.terms.find((t) => t.id === via.get(h.item_id))]) {
+          if (!x) continue;
+          x.pheromone.hits = Math.max(0, x.pheromone.hits - 1);
+          miss(x);
+        }
+      }
+    }
+    log(`regraded ${Math.min(i + 40, pool.length)}/${pool.length} ($${usd.toFixed(4)})`);
+  }
+  fs.writeFileSync(HOOKS_FILE(), all.map((h) => JSON.stringify(h)).join("\n") + "\n");
+  saveSources(sources);
+  saveTerms(terms);
+  return { checked: pool.length, lowered, unhit, usd };
 }

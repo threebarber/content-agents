@@ -281,3 +281,17 @@ test("editor pass: a card not worth writing is sent back, and a replacement that
     judgeLow.clear();
   }
 });
+
+test("/ca drop stops a term for good; the re-derive can't bring it back; pin undoes it", async () => {
+  const { runSlash } = await import("../src/agents/slash.ts");
+  const { loadTerms } = await import("../src/registry/store.ts");
+  await runSlash("pin claude code");
+  const r = await runSlash("drop claude code");
+  assert.match(r.reply, /Dropped \*claude code\*/);
+  const t = loadTerms().terms.find((x) => x.term === "claude code")!;
+  assert.ok(t.blocked && !t.pinned && !t.used_for.some((u) => u.endsWith("_search")));
+  assert.match((await runSlash("terms")).reply, /Dropped: claude code/);
+  assert.match((await runSlash("help")).reply, /\/ca drop <term>/);
+  await runSlash("pin claude code");
+  assert.ok(!loadTerms().terms.find((x) => x.term === "claude code")!.blocked, "pin unblocks");
+});

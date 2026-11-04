@@ -75,6 +75,7 @@ Turn them into ${slots} search phrases for finding high-engagement LinkedIn and 
 - Prefer phrases practitioners post about (tools, plays, roles, problems) over abstract categories.
 - Skip hiring/career/job-post topics.
 - These are already searched (pinned by the user, or still being tested), so do NOT propose them or near-duplicates of them: ${[...pinned, ...locked].map((t) => `"${t.term}"`).join(", ") || "(none)"}.
+- The user dropped these; never propose them or anything close: ${reg.terms.filter((t) => t.blocked).map((t) => `"${t.term}"`).join(", ") || "(none)"}.
 
 How the current search terms performed (strong = on-topic, well-hooked or high-engagement):
 ${perf || "(none yet)"}`,
@@ -93,7 +94,7 @@ ${perf || "(none yet)"}`,
     derivedIds.add(id);
     const uses = [...(p.linkedin ? ["linkedin_search"] : []), ...(p.x ? ["x_search"] : [])] as ("linkedin_search" | "x_search")[];
     const existing = reg.terms.find((t) => t.id === id || t.term.toLowerCase() === p.term.toLowerCase());
-    if (existing?.pinned) continue;
+    if (existing?.pinned || existing?.blocked) continue;
     if (existing) {
       existing.status = "active";
       existing.used_for = [...new Set([...existing.used_for.filter((u) => !u.endsWith("_search")), "tagging", "candidate_relevance", ...uses])] as typeof existing.used_for;

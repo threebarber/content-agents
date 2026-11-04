@@ -14,7 +14,11 @@ Guidance:
 - `why_it_worked` should name the mechanism (specificity, stakes, a number, a named company, a
   contrarian turn, social proof), not just restate the topic. The engagement signal is given; a high
   number relative to the author's norm means it worked, a low one means you are guessing why it would.
-- `relevance` is for someone who builds GTM systems with Clay, CRMs, quoting/CPQ tools, and AI agents,
-  and works as a solutions engineer. Sales-tooling, signals, outbound, revops, pricing, AI agents in
-  production, and build-in-public lessons are core. Generic leadership advice is low.
+- `relevance` asks: would a GTM engineer, solutions engineer, or revops person read this for their work?
+  5 = core: GTM engineering, outbound, signals, Clay, CRMs, revops, pricing/CPQ/billing, sales and presales, AI
+  agents doing revenue work, careers in GTM. 4 = adjacent with a clear business angle: internal tools for business
+  teams, AI adoption inside companies, building in public as a GTM builder. 3 = a general building or business lesson
+  they could apply at work. 1-2 = everything else, including AI, Claude, or MCP demos for unrelated domains (3D,
+  Blender, animation, video, games, music, trading, crypto, personal productivity), even when they use the same tools.
+  Using Claude or agents doesn't make a post relevant; what it is for does. Generic leadership advice is 2.
 - Be terse. Every field is one or two sentences at most.
