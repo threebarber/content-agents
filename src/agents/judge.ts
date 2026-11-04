@@ -45,7 +45,7 @@ export async function judgeCards(cards: CardDraft[]): Promise<{ worth: Map<numbe
       {
         role: "user",
         content: [
-          { type: "text", text: [`THEIR VOICE\n${readMemory("voice")}`, `THEIR PAST VERDICTS\n${pastVerdicts()}`, `REJECTED PATTERNS\n${readMemory("rejected")}`, `WHAT WORKS\n${readMemory("winning-patterns")}`].join("\n\n=====\n\n"), cache_control: { type: "ephemeral" } },
+          { type: "text", text: [`THEIR VOICE\n${readMemory("voice")}`, `ALREADY WRITTEN BY THEM\n${readMemory("already-written")}`, `THEIR PAST VERDICTS\n${pastVerdicts()}`, `REJECTED PATTERNS\n${readMemory("rejected")}`, `WHAT WORKS\n${readMemory("winning-patterns")}`].join("\n\n=====\n\n"), cache_control: { type: "ephemeral" } },
           { type: "text", text: `THE BATCH\n\n${batch}\n\nGrade every card.` },
         ],
       },

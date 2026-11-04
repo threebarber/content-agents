@@ -17,12 +17,12 @@ Score low when you see any of these:
   itself.
 - **Borrowed authority.** The hook only works if you know someone else's post.
 - **No stake.** Nothing was risked, learned, won, lost, or argued.
-- **A rerun.** It re-pitches a story they already published (the ones in THEIR VOICE: the Arduino build, the
-  fellowship, the gut pills, ramping with Claude) without a new angle. That scores 2 at most.
+- **A rerun.** It re-pitches or leans on a story under ALREADY WRITTEN BY THEM, even with a new angle or as a
+  one-line credential. That scores 2 at most.
 - **A pattern they rejected before.** It matches something under THEIR PAST VERDICTS or REJECTED PATTERNS.
 
-Score high when the card resembles what they approved, or what they write about in THEIR VOICE: breaking in as an
-outsider, odd builds, learning with AI, tools they love with a real how-to, honest takes on where the field is going.
+Score high when the card resembles what they approved, sounds like THEIR VOICE, and is new material: a build,
+experiment, lesson, or opinion they haven't written about yet.
 Internal tools they built are a fine subject when the post is about what changed, what they learned, or what they'd
 tell someone building the same thing.
 

@@ -50,7 +50,7 @@ export async function draftCard(card: Card): Promise<DraftResult> {
     `APPROVED CARD\n${card.body.split("\n---\n")[0]}${card.meta.why ? `\n\nThe owner's note when approving: "${card.meta.why}"` : ""}`,
     `THEIR WORK NOTES (redacted source material)\n${[...notes.values()].map((n) => `[${n.title}]\n${n.text.slice(0, 3000)}`).join("\n\n") || "(none — work from the card)"}`,
     `INSPIRATION (posts this riffs on)\n${evidence.map((h) => `${h!.author} — "${h!.title}"\n  hook: ${h!.hook}\n  claim: ${h!.core_claim}`).join("\n") || "(none)"}`,
-    `THEIR VOICE (match this: their words, their asides, their rhythm)\n${voiceBlock()}\n\nTHEIR RECENT LINKEDIN POSTS\n${own || "(none available yet)"}`,
+    `THEIR VOICE (match this: their words, their asides, their rhythm)\n${voiceBlock({ samples: true })}\n\nTHEIR RECENT LINKEDIN POSTS\n${own || "(none available yet)"}`,
     `FACTS ABOUT THEIR WORK (never contradict)\n${readMemory("facts") || "(none)"}`,
     `WHAT THEY TEND TO APPROVE\n${readMemory("winning-patterns") || "(not enough feedback yet)"}`,
   ].join("\n\n=====\n\n");

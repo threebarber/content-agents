@@ -105,16 +105,19 @@ export function hookLibrary(k: number): HookRecord[] {
     .slice(0, k);
 }
 
-/** The owner's voice: the hand-written profile plus the opening of each of their own writing samples. */
-export function voiceBlock(): string {
+/**
+ * The owner's voice. Ideation gets the style profile only: sample text there turns their old stories into new pitches.
+ * Drafts also get the full samples, fenced off as style reference, since matching prose needs real prose.
+ */
+export function voiceBlock(opts: { samples?: boolean } = {}): string {
   const dir = statePath("memory", "voice-samples");
-  const samples = fs.existsSync(dir)
-    ? fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => {
-        const [title, ...rest] = fs.readFileSync(path.join(dir, f), "utf8").split("\n");
-        return `${title.replace(/^#\s*/, "")}\n${rest.join("\n").trim().slice(0, 700)}…`;
-      })
+  const samples = opts.samples && fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => fs.readFileSync(path.join(dir, f), "utf8").split("\n").slice(1).join("\n").trim().slice(0, 2500))
     : [];
-  return [readMemory("voice") || "(no voice profile yet)", samples.length ? `OPENINGS OF THEIR OWN WRITING\n\n${samples.join("\n\n---\n\n")}` : ""].filter(Boolean).join("\n\n");
+  return [
+    readMemory("voice") || "(no voice profile yet)",
+    samples.length ? `STYLE REFERENCE ONLY: their own past writing. Copy the rhythm, asides, and word choice. Never mention, reuse, or allude to anything these samples are about.\n\n${samples.join("\n\n---\n\n")}` : "",
+  ].filter(Boolean).join("\n\n");
 }
 
 type AvoidTopic = { pattern: string; why: string };
@@ -164,7 +167,8 @@ function render(hooks: HookRecord[], notes: BrainRow[], extra: string): Rendered
     `FACTS ABOUT THEIR WORK (corrections from them; never contradict)\n${readMemory("facts") || "(none)"}`,
     `LEARNED PREFERENCES\n${readMemory("winning-patterns") || "(none yet — first runs)"}\n\nREJECTED PATTERNS\n${readMemory("rejected") || "(none yet)"}`,
     `NEVER THE TOPIC (may appear only as a one-line supporting example)\n${avoidTopics().map((t) => `- /${t.pattern}/ — ${t.why}`).join("\n") || "(none)"}`,
-    `THEIR VOICE (what they write about and how they sound; every hook should sound like this)\n\n${voiceBlock()}`,
+    `THEIR VOICE (how they sound; every hook should sound like this. Style only, not topics)\n\n${voiceBlock()}`,
+    `ALREADY WRITTEN BY THEM (published; never pitch these stories again, or a new angle on them)\n${readMemory("already-written") || "(none)"}`,
     `THEIR RECENT LINKEDIN POSTS (their real voice and what landed; don't repeat these)\n${myPosts(15) || "(none fetched yet)"}`,
     `HOOK LIBRARY (opening structures that worked, topic stripped; borrow the structure, fill it with their specifics)\n${lib || "(empty)"}`,
     `SWIPE FILE (what their audience is talking about: top posts from newsletters they follow and LinkedIn/X searches, last 3 weeks; a post here is a spark, never the hook)\n\n${sw || "(empty)"}`,

@@ -6,10 +6,9 @@ themselves; your job is to hand them ideas worth writing, each with an opening o
 WHAT A CARD IS
 A card is a post only {{owner}} could write: something they built, tried, learned, risked, or believe, told in first
 person. THEIR VOICE shows what that looks like: their real topics, their real openers, how they sound. Match it.
-The writing samples in THEIR VOICE are posts they already wrote: learn the style from them, don't re-pitch their
-stories. At most two cards per batch may lean on a story from the samples (the Arduino build, the fellowship, the
-gut pills, ramping with Claude), and only with a genuinely new angle. The rest need new material from the swipe file
-and work notes.
+THEIR VOICE is style only. The stories under ALREADY WRITTEN BY THEM are done: never pitch them again, don't
+give them a new angle, and don't use them as a credential line inside another card. Material comes from the swipe
+file and work notes.
 
 WHERE IDEAS COME FROM
 - The SWIPE FILE is the conversation their audience is having right now. Use it for two things: to pick a subject the
@@ -17,7 +16,8 @@ WHERE IDEAS COME FROM
   and `their_point` to what it said. That post is the spark. It is not the subject, and it doesn't go in the hook.
 - The HOOK LIBRARY holds opening structures that worked, stripped of their topics. Borrow a structure and fill it with
   {{owner}}'s own specifics. Put the template you used in `hook_template_used` and its move in `hook_move`.
-- THEIR VOICE and WORK NOTES supply the material: their builds, experiments, numbers, mistakes, and opinions.
+- WORK NOTES supply the material: their builds, experiments, numbers, mistakes, and opinions. THEIR VOICE supplies
+  how it sounds.
 
 THE HOOK STANDS ON ITS OWN
 - A reader who never saw the source post must get the hook. Open with {{owner}}'s situation, build, number, confession,
@@ -41,10 +41,10 @@ THE HOOK STANDS ON ITS OWN
 - Explain in `hook_breakdown` what move the hook makes and why it stops a GTM engineer mid-scroll.
 
 TOPICS THAT WORK FOR THEM
-Breaking in as an outsider. Builds that AI couldn't do alone. How they learn and ramp with AI. Tools they love, with a
-real how-to. Experiments with real results, including the ones that flopped. Honest opinions on where GTM engineering is
-headed (what's table stakes now, what still takes creativity). Every topic must pass the audience test: GTM engineers,
-SEs, and revops people would stop for it.
+Builds that AI couldn't do alone. Learning something new fast. Tools they love, with a real how-to. Experiments with
+real results, including the ones that flopped. Honest opinions on where GTM engineering is headed (what's table stakes
+now, what still takes creativity). Every topic must pass the audience test: GTM engineers, SEs, and revops people would
+stop for it.
 
 OTHER RULES
 - Spread the batch across different spark posts, authors, and subjects. Never use the same spark post twice.
