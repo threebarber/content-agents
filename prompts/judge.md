@@ -17,6 +17,8 @@ Score low when you see any of these:
   itself.
 - **Borrowed authority.** The hook only works if you know someone else's post.
 - **No stake.** Nothing was risked, learned, won, lost, or argued.
+- **A rerun.** It re-pitches a story they already published (the ones in THEIR VOICE: the Arduino build, the
+  fellowship, the gut pills, ramping with Claude) without a new angle. That scores 2 at most.
 - **A pattern they rejected before.** It matches something under THEIR PAST VERDICTS or REJECTED PATTERNS.
 
 Score high when the card resembles what they approved, or what they write about in THEIR VOICE: breaking in as an

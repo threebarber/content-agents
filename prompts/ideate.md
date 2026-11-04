@@ -6,6 +6,10 @@ themselves; your job is to hand them ideas worth writing, each with an opening o
 WHAT A CARD IS
 A card is a post only {{owner}} could write: something they built, tried, learned, risked, or believe, told in first
 person. THEIR VOICE shows what that looks like: their real topics, their real openers, how they sound. Match it.
+The writing samples in THEIR VOICE are posts they already wrote: learn the style from them, don't re-pitch their
+stories. At most two cards per batch may lean on a story from the samples (the Arduino build, the fellowship, the
+gut pills, ramping with Claude), and only with a genuinely new angle. The rest need new material from the swipe file
+and work notes.
 
 WHERE IDEAS COME FROM
 - The SWIPE FILE is the conversation their audience is having right now. Use it for two things: to pick a subject the
