@@ -111,7 +111,7 @@ export function seedState(dir: string) {
 export const goodCard = (over: Record<string, unknown> = {}) => ({
   riff_on: "substack:alpha.substack.com:1", their_point: "Ann said signals beat lists, with 120 likes.", riff_type: "extend",
   title: "47 signals and one I actually used", platform: "linkedin", hook: "I tracked 47 buying signals in Clay last month. 1 changed a deal.",
-  hook_breakdown: "a number and a twist", angle: "your take", outline: ["a", "b", "c"], format: "data",
+  hook_breakdown: "a number and a twist", hook_move: "other", angle: "your take", outline: ["a", "b", "c"], format: "data",
   hook_template_used: "the stat line", brain_refs: ["sessions/2026-10/2026-10-12-quoting-bot"], evidence: [{ item_id: "substack:alpha.substack.com:1", why: "riff" }],
   why_now: "this week", predicted_score: 7, ...over,
 });

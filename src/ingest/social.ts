@@ -1,4 +1,5 @@
 import { runActor } from "../lib/apify.js";
+import { getJson } from "../lib/http.js";
 import type { Item } from "../../schemas/item.js";
 
 const LI_SEARCH = "harvestapi/linkedin-post-search";
@@ -138,7 +139,47 @@ export async function linkedInPostByUrl(url: string): Promise<Item | null> {
 }
 
 /** A single tweet by URL. */
+type FxTweet = {
+  id: string; url: string; text: string; created_at: string; likes?: number; replies?: number; retweets?: number; quotes?: number; views?: number;
+  author?: { name?: string; screen_name?: string };
+  article?: { title?: string; preview_text?: string; content?: { blocks?: { text?: string }[] } } | null;
+};
+
+/** One tweet from the free fxtwitter API, including the full body of long-form X Articles (the scraper only returns their t.co link). */
+export async function fxTweet(url: string): Promise<Item | null> {
+  const m = url.match(/(?:x|twitter)\.com\/([^/?#]+)\/status\/(\d+)/);
+  if (!m) return null;
+  const r = await getJson<{ code?: number; tweet?: FxTweet }>(`https://api.fxtwitter.com/${m[1]}/status/${m[2]}`, {}, 2);
+  const t = r.tweet;
+  if (!t) return null;
+  const a = t.article;
+  const body = a ? [a.title, ...(a.content?.blocks ?? []).map((b) => b.text ?? "")].filter(Boolean).join("\n\n").trim() : "";
+  const text = body || (t.text ?? "").trim();
+  if (!text) return null;
+  const handle = (t.author?.screen_name ?? m[1]).toLowerCase();
+  return {
+    id: `x:${t.id}`,
+    source_id: `x:${handle}`,
+    type: "x",
+    url: `https://x.com/${t.author?.screen_name ?? m[1]}/status/${t.id}`,
+    title: a?.title?.trim() || firstLine(text),
+    author: t.author?.name ?? handle,
+    published_at: new Date(t.created_at).toISOString(),
+    text,
+    text_truncated: false,
+    metrics: { likes: t.likes ?? null, comments: t.replies ?? null, shares: (t.retweets ?? 0) + (t.quotes ?? 0), wordcount: text.split(/\s+/).length, views: t.views ?? null },
+    tags: a ? ["x-article"] : [],
+    paywalled: false,
+    outbound_links: [],
+    fetched_at: new Date().toISOString(),
+    author_url: `https://x.com/${t.author?.screen_name ?? m[1]}`,
+  };
+}
+
+/** A saved X link: fxtwitter first (free, reads X Articles), the Apify scraper as fallback. */
 export async function xPostByUrl(url: string): Promise<Item | null> {
+  const fx = await fxTweet(url).catch(() => null);
+  if (fx) return fx;
   const id = url.match(/status\/(\d+)/)?.[1];
   const raw = await runActor<Tweet>(X_SCRAPER, id ? { tweetIds: [id], maxItems: 1 } : { startUrls: [url], maxItems: 1 });
   return raw[0] ? xItem(raw[0], undefined, false) : null; // explicitly saved: skip the spam/reply filters

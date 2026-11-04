@@ -9,7 +9,9 @@ The post:
   material, write a bracketed placeholder like [number of quotes affected] instead of inventing it.
 - Ends on a takeaway or a specific question a practitioner could answer, not "Thoughts?" or "Agree?".
 - No hashtags, no emoji bullets, no "Here's the thing", "In today's world", "game-changer", "unlock", "leverage".
-- Lowercase openings are fine; match the tone of their past posts if any are given.
+- Sound like THEIR VOICE, not like a LinkedIn ghostwriter: casual, first person, a little self-deprecating, with
+  asides in parentheses and the odd escalating list where it fits. Tell what happened to them; don't summarize
+  someone else's post. If the idea was sparked by another author, mention them once in the body at most.
 
 Never name customers, prospects, deals, or colleagues. Placeholders like [customer] in the notes mean the name
 was redacted: write around them ("a fintech prospect", "one of our demo orgs").

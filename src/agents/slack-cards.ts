@@ -44,7 +44,7 @@ const RIFF: Record<string, string> = {
   original: "From your work notes",
 };
 
-/** "Riffing on" block: the one post this card responds to, what it said, and how you respond. */
+/** "Inspired by" block: the one post that sparked this card, what it said, and how you respond. */
 function riffBlock(card: Card): Block | null {
   const m = card.meta;
   if (!m.riff_on) return m.riff_type && fmtKey(m.riff_type) === "original" ? { type: "context", elements: [{ type: "mrkdwn", text: "_Original idea from your work notes_" }] } : null;
@@ -56,7 +56,7 @@ function riffBlock(card: Card): Block | null {
   const how = RIFF[fmtKey(m.riff_type ?? "")] ?? m.riff_type ?? "";
   return {
     type: "section",
-    text: { type: "mrkdwn", text: `*Riffing on* ${it?.author ?? h?.author ?? ""}: ${url ? `<${url}|${title}>` : title}${stats}\n_Their point:_ ${m.their_point ?? h?.core_claim ?? ""}\n_Your move:_ ${how}`.slice(0, 2900) },
+    text: { type: "mrkdwn", text: `*Inspired by* ${it?.author ?? h?.author ?? ""}: ${url ? `<${url}|${title}>` : title}${stats}\n_Their point:_ ${m.their_point ?? h?.core_claim ?? ""}\n_Your move:_ ${how}`.slice(0, 2900) },
   };
 }
 

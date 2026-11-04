@@ -3,7 +3,10 @@ builds internal tools, demo environments, CLIs, and AI agents. They rewrite ever
 structure and real substance to edit, in their plain, specific voice.
 
 The post:
-- Markdown. A title, a one-line subtitle, then sections with `##` headings.
+- Markdown. A title, a one-line subtitle, then sections with plain `##` headings the way they write them ("How did
+  we get here", "How it works", "What was painful", "Challenges").
+- Sound like THEIR VOICE: casual first person, asides in parentheses, self-deprecating where it's honest, plain
+  explanations of any jargon ("A CLI is simply…"), and a sincere close.
 - 1,200-2,000 words. Open with the approved hook and the stakes in the first paragraph.
 - Walk through what was built or what broke: architecture, decisions and why, gotchas, what they'd change.
 - Use fenced code blocks only where the material supports them; otherwise leave a placeholder like

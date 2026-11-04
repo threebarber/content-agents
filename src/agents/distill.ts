@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { claude, MODELS, prompt, tally } from "./llm.js";
 import { HookExtraction, type HookRecord } from "../../schemas/hook.js";
-import { normalizeFormat } from "../../schemas/card.js";
+import { normalizeFormat, normalizeHookMove } from "../../schemas/card.js";
 import type { Item } from "../../schemas/item.js";
 import { statePath } from "../lib/paths.js";
 import { readJsonl, appendJsonl } from "../lib/jsonl.js";
@@ -87,6 +87,7 @@ export async function distill(opts: { limit?: number; concurrency?: number; log?
         const socialHit = !!it.found_via && engScore >= 60 && p.relevance >= 3;
         const isHit = (zval != null && zval >= fo.hit_rules.engagement_z_min && p.relevance >= 3) || socialHit || (p.hook_quality >= fo.hit_rules.hook_quality_min && p.relevance >= 3);
         p.format = normalizeFormat(p.format);
+        p.hook_move = normalizeHookMove(p.hook_move);
         p.topics = [...new Set(p.topics.map((t) => t.toLowerCase().replace(/\s+/g, " ").trim()).filter(Boolean))].slice(0, 6);
         out.push({ ...p, item_id: it.id, source_id: it.source_id, author: it.author, title: it.title, url: it.url, published_at: it.published_at, engagement_z: zval, hit: isHit, model: MODELS.distill, distilled_at: new Date().toISOString() });
         // pheromone: the source, plus any active term the post's topics touch

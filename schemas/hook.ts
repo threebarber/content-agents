@@ -3,7 +3,8 @@ import { z } from "zod";
 /** What the distiller extracts from one post (model output). */
 export const HookExtraction = z.object({
   hook: z.string().describe("The opening 1-2 lines exactly as written (or the title+subtitle if the body opens weakly)."),
-  hook_template: z.string().describe("A reusable, topic-agnostic version of the hook with [placeholders]."),
+  hook_template: z.string().describe("The hook's structure with every topic-specific word replaced by [placeholders], so it could open a post about anything."),
+  hook_move: z.string().describe("The move the hook makes, one of: confession, credential-gap, risk, scene, stat-line, before-after, dare, list, question, tool-love, hot-take, how-i, result, reaction."),
   format: z.string().describe("One of: story, list, contrarian, teardown, howto, data, casestudy, roundup, question, announcement, essay, interview, other."),
   topics: z.array(z.string()).describe("3-6 short lowercase topics, e.g. 'gtm engineering', 'clay', 'signals', 'pricing'."),
   core_claim: z.string().describe("The one idea the post argues, in one sentence."),
@@ -14,7 +15,9 @@ export const HookExtraction = z.object({
 export type HookExtraction = z.infer<typeof HookExtraction>;
 
 /** Stored swipe-file record: extraction + provenance. One per item in data/hooks.jsonl. */
-export type HookRecord = HookExtraction & {
+export type HookRecord = Omit<HookExtraction, "hook_move"> & {
+  /** absent on posts distilled before moves were tracked */
+  hook_move?: string;
   item_id: string;
   source_id: string;
   author: string | null;

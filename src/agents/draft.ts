@@ -5,6 +5,7 @@ import { claude, MODELS, prompt, readMemory, tally } from "./llm.js";
 import { writeCard, type Card } from "./cards.js";
 import { cardContent } from "./cards.js";
 import { loadHooks } from "./distill.js";
+import { voiceBlock } from "./ideate.js";
 import { itemsById } from "../lib/items.js";
 import { postMessage, sections } from "../lib/slack.js";
 import { withDb } from "../lib/duckdb.js";
@@ -16,7 +17,7 @@ const DraftOut = z.object({
 
 async function recentOwnPosts(k: number): Promise<string> {
   const rows = await withDb((q) => q(`SELECT text FROM items WHERE source_id = 'me:linkedin' ORDER BY published_at DESC LIMIT ${k}`)).catch(() => []);
-  return rows.map((r, i) => `--- his post ${i + 1} ---\n${String(r.text).slice(0, 1500)}`).join("\n\n");
+  return rows.map((r, i) => `--- their post ${i + 1} ---\n${String(r.text).slice(0, 1500)}`).join("\n\n");
 }
 
 const callDraft = traceable(
@@ -49,7 +50,7 @@ export async function draftCard(card: Card): Promise<DraftResult> {
     `APPROVED CARD\n${card.body.split("\n---\n")[0]}${card.meta.why ? `\n\nThe owner's note when approving: "${card.meta.why}"` : ""}`,
     `THEIR WORK NOTES (redacted source material)\n${[...notes.values()].map((n) => `[${n.title}]\n${n.text.slice(0, 3000)}`).join("\n\n") || "(none — work from the card)"}`,
     `INSPIRATION (posts this riffs on)\n${evidence.map((h) => `${h!.author} — "${h!.title}"\n  hook: ${h!.hook}\n  claim: ${h!.core_claim}`).join("\n") || "(none)"}`,
-    `THEIR VOICE\n${readMemory("voice") || ""}\n${own || "(no past posts available yet: write plainly and specifically)"}`,
+    `THEIR VOICE (match this: their words, their asides, their rhythm)\n${voiceBlock()}\n\nTHEIR RECENT LINKEDIN POSTS\n${own || "(none available yet)"}`,
     `FACTS ABOUT THEIR WORK (never contradict)\n${readMemory("facts") || "(none)"}`,
     `WHAT THEY TEND TO APPROVE\n${readMemory("winning-patterns") || "(not enough feedback yet)"}`,
   ].join("\n\n=====\n\n");

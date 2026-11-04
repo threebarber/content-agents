@@ -161,3 +161,38 @@ test("the same Substack post under two addresses is stored once", async () => {
   assert.equal(writeItems([{ ...base, id: "substack:x.substack.com:999001" }]), 1);
   assert.equal(writeItems([{ ...base, id: "substack:www.x.com:999001" }]), 0);
 });
+
+test("hooks that lean on someone else's post are flagged; one quoted reaction per batch is allowed", () => {
+  const hooks = [
+    { item_id: "linkedin:1", author: "Cody Schneider" },
+    { item_id: "linkedin:2", author: "Bruno Estrella" },
+    { item_id: "linkedin:3", author: "Ann Lee" },
+    { item_id: "linkedin:4", author: "Geoff Charles" },
+  ] as never;
+  const cards = [
+    goodCard({ brain_refs: [], riff_on: "linkedin:1", hook: "Cody says GTM engineering is a Postgres database with 3 tables.", hook_template_used: "a" }),
+    goodCard({ brain_refs: [], riff_on: "linkedin:2", hook: "Bruno Estrella handed Eric his Ramp card so Eric could run 40 tests.", hook_template_used: "b" }),
+    goodCard({ brain_refs: [], riff_on: "linkedin:3", riff_type: "screenshot-commentary", hook: "Ann's post has 1 line I keep rereading.", hook_template_used: "c" }),
+    goodCard({ brain_refs: [], riff_on: "linkedin:4", hook: "I applied to Clay's fellowship twice. The first time I didn't even get a take-home.", hook_template_used: "d", hook_move: "confession" }),
+    goodCard({ brain_refs: [], riff_on: null, hook: "I sold gut pills for horses before I ever touched CPQ (proof below).", hook_template_used: "e", hook_move: "confession" }),
+  ];
+  const issues = verifyCards(cards as never, hooks, 0);
+  assert.match(issues.get(0)!.join(), /leans on someone else's post.*Cody/);
+  assert.match(issues.get(1)!.join(), /leans on someone else's post.*Bruno/);
+  assert.ok(!issues.get(2)?.some((m) => /leans on/.test(m)), "the one screenshot-commentary card may quote");
+  assert.ok(!issues.has(3), `standalone hook passes: ${issues.get(3)}`);
+  assert.match(issues.get(4)!.join(), /same hook move as card 4/);
+});
+
+test("X Articles are read in full via fxtwitter", async () => {
+  const { routes, mockFetch } = await import("./helpers.ts");
+  mockFetch();
+  routes.push({ match: /api\.fxtwitter\.com/, reply: () => ({ code: 200, tweet: { id: "42", url: "", text: "https://t.co/x", created_at: "Wed Apr 08 22:12:10 +0000 2026", likes: 10, replies: 2, author: { name: "Geoff Charles", screen_name: "geoffintech" }, article: { title: "How to get your company AI pilled", content: { blocks: [{ text: "Most companies are still debating." }, { text: "Ramp's AI usage is up 6,300%." }] } } } }) });
+  const { xPostByUrl } = await import("../src/ingest/social.ts");
+  const it = (await xPostByUrl("https://x.com/geoffintech/status/42?ct=rw-li"))!;
+  assert.equal(it.id, "x:42");
+  assert.equal(it.source_id, "x:geoffintech");
+  assert.equal(it.title, "How to get your company AI pilled");
+  assert.match(it.text, /6,300%/);
+  assert.ok(!/t\.co/.test(it.text), "article body replaces the bare link");
+});

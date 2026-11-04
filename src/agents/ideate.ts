@@ -1,9 +1,10 @@
 import fs from "node:fs";
+import path from "node:path";
 import YAML from "yaml";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
 import { claude, MODELS, prompt, readMemory, tally } from "./llm.js";
-import { IdeateOutput, normalizeFormat, normalizeRiffType, type CardDraft, type CardMeta } from "../../schemas/card.js";
+import { IdeateOutput, normalizeFormat, normalizeHookMove, normalizeRiffType, type CardDraft, type CardMeta } from "../../schemas/card.js";
 import { loadHooks } from "./distill.js";
 import { cardBody, cardId, listCards, writeCard, repoUrl, type Card } from "./cards.js";
 import { withDb } from "../lib/duckdb.js";
@@ -80,6 +81,41 @@ async function workNotes(days: number, k: number, perProject = 2): Promise<Brain
   }
 }
 
+/**
+ * Opening structures that worked, stripped of their topics: the best-rated hook per author over the last 90 days,
+ * from any niche (a good structure travels). Quote-and-react templates are left out so the library never teaches
+ * opening with someone else's claim.
+ */
+const QUOTES_SOMEONE = /\[(name|person|author|founder|expert|creator)\][^.]{0,30}\b(says?|said|argues?|claims?|wrote|thinks?)\b|\b(says|argues|claims)\b/i;
+const BAIT = /giving away|comment ["'“\[]|big news|we just (launched|open.sourced|raised)|i['’]m (hiring|excited to announce)|link in (the )?comments/i;
+export function hookLibrary(k: number): HookRecord[] {
+  const since = Date.now() - 90 * 86400000;
+  const seen = new Set<string>();
+  return loadHooks()
+    .filter((h) => !h.skipped && h.hook_quality >= 4 && h.hook_template && new Date(h.published_at).getTime() >= since)
+    .filter((h) => !QUOTES_SOMEONE.test(h.hook_template) && !BAIT.test(h.hook_template) && !["announcement", "roundup"].includes(h.format) && !GENERIC.some((re) => re.test(h.hook_template) || re.test(h.hook)))
+    .sort((a, b) => b.hook_quality + (b.engagement_z ?? 0) * 0.5 - (a.hook_quality + (a.engagement_z ?? 0) * 0.5) || a.item_id.localeCompare(b.item_id))
+    .filter((h) => {
+      const who = h.source_id;
+      if (seen.has(who)) return false;
+      seen.add(who);
+      return true;
+    })
+    .slice(0, k);
+}
+
+/** The owner's voice: the hand-written profile plus the opening of each of their own writing samples. */
+export function voiceBlock(): string {
+  const dir = statePath("memory", "voice-samples");
+  const samples = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => {
+        const [title, ...rest] = fs.readFileSync(path.join(dir, f), "utf8").split("\n");
+        return `${title.replace(/^#\s*/, "")}\n${rest.join("\n").trim().slice(0, 700)}…`;
+      })
+    : [];
+  return [readMemory("voice") || "(no voice profile yet)", samples.length ? `OPENINGS OF THEIR OWN WRITING\n\n${samples.join("\n\n---\n\n")}` : ""].filter(Boolean).join("\n\n");
+}
+
 type AvoidTopic = { pattern: string; why: string };
 export function avoidTopics(): AvoidTopic[] {
   const f = statePath("config", "avoid-topics.yaml");
@@ -116,16 +152,21 @@ function render(hooks: HookRecord[], notes: BrainRow[], extra: string): Rendered
       const it = items.get(h.item_id);
       const eng = it ? `❤️${it.metrics.likes ?? "?"} 💬${it.metrics.comments ?? "?"}` : "";
       const excerpt = i < 18 && it ? `\n  excerpt: ${it.text.replace(/\s+/g, " ").slice(0, 900)}` : "";
-      return `[${h.item_id}] ${h.author} — "${h.title}" (${it?.type ?? "?"}, ${eng}, z=${h.engagement_z ?? "?"}, ${h.format})\n  hook: ${h.hook}\n  claim: ${h.core_claim}\n  why it worked: ${h.why_it_worked}${excerpt}`;
+      return `[${h.item_id}] ${h.author} — "${h.title}" (${it?.type ?? "?"}, ${eng}, z=${h.engagement_z ?? "?"}, ${h.format})\n  claim: ${h.core_claim}\n  why it worked: ${h.why_it_worked}${excerpt}`;
     })
     .join("\n\n");
+  const lib = hookLibrary(30)
+    .map((h) => `- ${h.hook_template}\n    e.g. "${h.hook.replace(/\s+/g, " ").slice(0, 160)}"${h.hook_move ? ` (${h.hook_move})` : ""}`)
+    .join("\n");
   const wn = notes.map((n) => `[${n.id}] (${n.kind}, ${n.published_at.slice(0, 10)}) ${n.title}\n${n.text.slice(0, 1200)}`).join("\n\n---\n\n");
   const stable = [
     `FACTS ABOUT THEIR WORK (corrections from them; never contradict)\n${readMemory("facts") || "(none)"}`,
     `LEARNED PREFERENCES\n${readMemory("winning-patterns") || "(none yet — first runs)"}\n\nREJECTED PATTERNS\n${readMemory("rejected") || "(none yet)"}`,
     `NEVER THE TOPIC (may appear only as a one-line supporting example)\n${avoidTopics().map((t) => `- /${t.pattern}/ — ${t.why}`).join("\n") || "(none)"}`,
+    `THEIR VOICE (what they write about and how they sound; every hook should sound like this)\n\n${voiceBlock()}`,
     `THEIR RECENT LINKEDIN POSTS (their real voice and what landed; don't repeat these)\n${myPosts(15) || "(none fetched yet)"}`,
-    `SWIPE FILE (top posts from newsletters they follow and from LinkedIn/X searches on their topics, last 3 weeks)\n\n${sw || "(empty)"}`,
+    `HOOK LIBRARY (opening structures that worked, topic stripped; borrow the structure, fill it with their specifics)\n${lib || "(empty)"}`,
+    `SWIPE FILE (what their audience is talking about: top posts from newsletters they follow and LinkedIn/X searches, last 3 weeks; a post here is a spark, never the hook)\n\n${sw || "(empty)"}`,
     `WORK NOTES (redacted, last 30 days: what was built, decided, or thought — optional evidence, never the topic)\n\n${wn || "(none)"}`,
   ].join("\n\n=====\n\n");
   const volatile = [
@@ -179,6 +220,7 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
   const sources = [...new Set(evidence.map(sourceOf).filter((s): s is string => !!s && s !== "brain" && !s.startsWith("web:")))];
   d.format = normalizeFormat(d.format);
   d.riff_type = d.riff_on ? normalizeRiffType(d.riff_type) : "original";
+  d.hook_move = normalizeHookMove(d.hook_move);
   d.brain_refs = noteIds.length ? normalizeRefs(d.brain_refs, noteIds) : d.brain_refs;
   d.evidence = d.evidence.filter((e) => known.has(e.item_id));
   return {
@@ -198,6 +240,7 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
     model: MODELS.ideate,
     published_url: "",
     hook_breakdown: d.hook_breakdown,
+    hook_move: d.hook_move,
     riff_on: d.riff_on,
     riff_type: d.riff_type,
     their_point: d.their_point,
@@ -214,9 +257,17 @@ const GENERIC = [
   /\b(is|are) earned\b|\bthe real (problem|issue|story|question|bottleneck)\b|\b(was|were) always\b|\bnever (was|existed)\b|\bhere['’]?s the thing\b|\blet that sink in\b/i,
 ];
 
+/** Openings that lean on someone else's post instead of standing on their own. */
+const LEANS_ON_POST = /\b(says|said|argues|argued|claims|claimed|wrote|writes|posted|thinks)\b|['’]s (post|newsletter|thread|take|article|piece|tweet)\b|\b(in|from) (his|her|their) (post|newsletter|thread|article)\b/i;
+function namesIn(author: string | null | undefined): string[] {
+  return (author ?? "").split(/[\s,|·-]+/).filter((w) => /^[A-Z][a-zA-Z'’]{2,}$/.test(w) && !["The", "And", "GTM", "Newsletter", "Substack"].includes(w));
+}
+
 /** Verification loop: deterministic checks on a batch. Returns issues per card index (empty = pass). */
 export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: number): Map<number, string[]> {
   const ids = new Set(hooks.map((h) => h.item_id));
+  const authorOf = new Map(hooks.map((h) => [h.item_id, h.author]));
+  let reactions = 0;
   const issues = new Map<number, string[]>();
   const add = (i: number, m: string) => issues.set(i, [...(issues.get(i) ?? []), m]);
   const seenRiff = new Map<string, number>();
@@ -229,12 +280,21 @@ export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: n
       if (seenRiff.has(c.riff_on)) add(i, `riffs on the same post as card ${seenRiff.get(c.riff_on)! + 1}`);
       else seenRiff.set(c.riff_on, i);
     }
-    const move = (c.hook_template_used ?? "").toLowerCase().slice(0, 40);
-    if (move) {
-      if (seenMove.has(move)) add(i, `same hook move as card ${seenMove.get(move)! + 1}`);
-      else seenMove.set(move, i);
+    const tpl = (c.hook_template_used ?? "").toLowerCase().slice(0, 40);
+    const move = normalizeHookMove(c.hook_move);
+    for (const m of [tpl && `tpl:${tpl}`, move !== "other" && `move:${move}`].filter((x): x is string => !!x)) {
+      if (seenMove.has(m)) add(i, `same hook ${m.startsWith("tpl") ? "template" : "move"} as card ${seenMove.get(m)! + 1}`);
+      else seenMove.set(m, i);
     }
     const opening = c.hook.split(/(?<=[.?!])\s+/).slice(0, 2).join(" ");
+    const author = c.riff_on ? authorOf.get(c.riff_on) : null;
+    const named = namesIn(author).find((n) => new RegExp(`\\b${n}\\b`).test(opening));
+    if (named || LEANS_ON_POST.test(opening)) {
+      // one card per batch may be a direct reaction to a post; every other hook must stand on its own
+      const allowed = reactions === 0 && normalizeRiffType(c.riff_type) === "screenshotcommentary";
+      if (allowed) reactions++;
+      else add(i, `hook leans on someone else's post (${named ? `names ${named}` : "cites what someone said"}); open with the owner's own situation, build, number, or opinion so it stands alone`);
+    }
     if (!/\d/.test(opening) && !/\b[A-Z][a-zA-Z]{2,}\b/.test(opening.slice(1))) add(i, "opening has no concrete specific (number, named tool/company/person)");
   });
   const avoid = avoidTopics().map((t) => ({ re: new RegExp(t.pattern, "i"), why: t.why }));
@@ -245,7 +305,7 @@ export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: n
   });
   for (const [key, idx] of perProject) if (idx.length > 2) for (const i of idx.slice(2)) add(i, `third card leaning on the same work project (${key}); use a different project or none`);
   const riffs = cards.filter((c) => c.riff_on && ids.has(c.riff_on)).length;
-  if (riffs < minRiffs) cards.forEach((c, i) => { if (!c.riff_on) add(i, `batch needs ≥${minRiffs} cards riffing on a swipe-file post (has ${riffs}); make this one a response to a specific post`); });
+  if (riffs < minRiffs) cards.forEach((c, i) => { if (!c.riff_on) add(i, `batch needs ≥${minRiffs} cards riffing on a swipe-file post (has ${riffs}); set riff_on to the post that sparked this one`); });
   return issues;
 }
 
@@ -270,14 +330,14 @@ async function generateChecked(user: Rendered, n: number, hooks: HookRecord[], f
   const first = firstPass ?? (await callModel({ system: prompt("ideate"), user, n }));
   let cards = first.cards;
   let usd = first.usd;
-  const issues = verifyCards(cards, hooks, Math.max(1, n - 2));
+  const issues = verifyCards(cards, hooks, Math.ceil(n / 2));
   if (!issues.size) return { cards, usd, run_id: first.run_id, repaired: 0 };
   const flagged = [...issues.keys()];
   const keep = cards.filter((_, i) => !issues.has(i));
   const report = flagged.map((i) => `Card ${i + 1} "${cards[i].title}" — hook: "${cards[i].hook}"\n  problems: ${issues.get(i)!.join("; ")}`).join("\n");
   const repair = await callModel({
     system: prompt("ideate"),
-    user: { stable: user.stable, volatile: `${user.volatile}\n\n=====\n\nREVISION REQUIRED\nThese cards failed review:\n${report}\n\nCards already accepted (don't duplicate their posts or hook moves):\n${keep.map((c) => `- [${c.riff_on}] ${c.hook_template_used} :: ${c.hook}`).join("\n") || "(none)"}` },
+    user: { stable: user.stable, volatile: `${user.volatile}\n\n=====\n\nREVISION REQUIRED\nThese cards failed review:\n${report}\n\nCards already accepted (don't duplicate their posts or hook moves):\n${keep.map((c) => `- [${c.riff_on}] (${c.hook_move}) ${c.hook_template_used} :: ${c.hook}`).join("\n") || "(none)"}` },
     n: flagged.length,
   });
   usd += repair.usd;
@@ -331,7 +391,7 @@ export async function ideateFromSaved(items: SavedItem[], note: string, thread?:
   const per = items.length > 1 ? 1 : 2;
   const n = Math.min(4, per * items.length);
   const saved = items.map((i) => `[${i.id}] ${i.author ?? "?"} — "${i.title ?? ""}" (❤️${i.metrics.likes ?? "?"} 💬${i.metrics.comments ?? "?"})\n${i.text.slice(0, 6000)}`).join("\n\n---\n\n");
-  const extra = `SAVED POST(S): THE SUBJECT OF THIS BATCH\nThe owner dropped ${items.length > 1 ? "these posts" : "this post"} into Slack${note ? ` with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${n} card(s). Every card must respond to a saved post above: set riff_on to its id (${items.map((i) => i.id).join(", ")}), and their_point to what that post specifically argued. Build each card from the saved post's own content (its claims, examples, numbers) plus the owner's work notes where they fit. Do not bring in other people's posts. Use a different riff_type and hook move for each card.`;
+  const extra = `SAVED POST(S): THE SUBJECT OF THIS BATCH\nThe owner dropped ${items.length > 1 ? "these posts" : "this post"} into Slack${note ? ` with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${n} card(s) sparked by a saved post above: set riff_on to its id (${items.map((i) => i.id).join(", ")}), and their_point to what that post specifically argued. The saved post sets the subject; the card is the owner's own post about that subject, from their experience, builds, and opinions (THEIR VOICE, WORK NOTES). The hook stands on its own and doesn't name the author or cite the post; at most one card may be a direct reaction that quotes it. Don't map the post onto one of their tools ("they did X, my tool does X"). Do not bring in other people's posts. Use a different riff_type and hook move for each card.`;
   const { cards, usd, run_id } = await generateChecked(render([...savedHooks, ...background], notes, extra), n, savedHooks);
   const files = cards.map((c, k) => {
     // enforce the subject: a card that wandered to another post is pointed back at the saved one
