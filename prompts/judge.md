@@ -26,6 +26,16 @@ experiment, lesson, or opinion they haven't written about yet.
 Internal tools they built are a fine subject when the post is about what changed, what they learned, or what they'd
 tell someone building the same thing.
 
+Cards come in four kinds. Judge each one by what it asks of them:
+- **post:** is the concept worth a post, and is it a concept rather than a report of something they did at work?
+- **build:** would one person actually build this in the stated effort, is it something AI couldn't do for them
+  alone, and would the result be worth showing?
+- **experiment:** is the claim one people actually argue about, is the method doable, and is it worth posting
+  whichever way it comes out?
+- **research:** would the answer settle something the audience argues about, and can the data be collected in
+  public?
+A build, experiment, or research card that would use employer or customer data scores 1.
+
 Judge the idea, not the polish. Be strict: most batches have a few cards that aren't worth writing. `reason` is one
 plain sentence, addressed to {{owner}} as "you". `fix` is one sentence saying what would make it worth writing (empty
 for 4-5).

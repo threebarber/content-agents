@@ -54,7 +54,10 @@ export async function draftCard(card: Card): Promise<DraftResult> {
     `FACTS ABOUT THEIR WORK (never contradict)\n${readMemory("facts") || "(none)"}`,
     `WHAT THEY TEND TO APPROVE\n${readMemory("winning-patterns") || "(not enough feedback yet)"}`,
   ].join("\n\n=====\n\n");
-  const r = await callDraft({ system: prompt(linkedin ? "draft_linkedin" : "draft_hashnode"), user, maxTokens: linkedin ? 16000 : 48000 });
+  const kind = card.meta.kind ?? card.meta.content?.kind ?? "post";
+  const r = kind === "post"
+    ? await callDraft({ system: prompt(linkedin ? "draft_linkedin" : "draft_hashnode"), user, maxTokens: linkedin ? 16000 : 48000 })
+    : await callDraft({ system: prompt("draft_brief"), user: `KIND: ${kind}\n\n${user}`, maxTokens: 16000 });
   const words = r.draft.split(/\s+/).filter(Boolean).length;
   card.meta.verdict = "approve";
   const body = `${card.body.split("\n---\n")[0].trim()}\n\n---\n\n## Draft (${words} words)\n\n${r.draft}\n\n## Notes\n\n${r.notes}\n`;
@@ -66,7 +69,8 @@ export async function draftCard(card: Card): Promise<DraftResult> {
 async function postDraftThread(card: Card, draft: string, notes: string, words: number): Promise<void> {
   const { channel, ts } = card.meta.slack!;
   const { title } = cardContent(card);
-  const label = card.meta.platform === "linkedin" ? "LinkedIn post" : "Hashnode article";
+  const kind = card.meta.kind ?? card.meta.content?.kind ?? "post";
+  const label = kind !== "post" ? `${kind[0].toUpperCase()}${kind.slice(1)} plan` : card.meta.platform === "linkedin" ? "LinkedIn post" : "Hashnode article";
   // Slack sections cap at 3,000 chars: split on paragraph boundaries into code blocks (easy to copy, keeps line breaks)
   const chunks: string[] = [];
   let cur = "";

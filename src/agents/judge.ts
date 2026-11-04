@@ -34,7 +34,7 @@ function pastVerdicts(): string {
 export async function judgeCards(cards: CardDraft[]): Promise<{ worth: Map<number, Worth>; usd: number }> {
   if (!cards.length) return { worth: new Map(), usd: 0 };
   const batch = cards
-    .map((c, i) => `CARD ${i + 1}: ${c.title}\nhook: ${c.hook}\nangle: ${c.angle}\noutline: ${c.outline.join(" / ")}${c.their_point ? `\nsparked by: ${c.their_point}` : ""}`)
+    .map((c, i) => `CARD ${i + 1} (${c.kind ?? "post"}${c.effort ? `, ${c.effort}` : ""}): ${c.title}\nconcept: ${c.concept ?? ""}\nhook: ${c.hook}\nangle: ${c.angle}\noutline: ${c.outline.join(" / ")}${c.their_point ? `\nsparked by: ${c.their_point}` : ""}`)
     .join("\n\n");
   const res = await claude().messages.parse({
     model: MODELS.judge,

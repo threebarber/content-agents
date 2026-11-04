@@ -33,6 +33,7 @@ const FORMAT: Record<string, string> = {
   question: "Question: open a debate and answer it yourself",
   essay: "Essay: argue one idea",
 };
+const KIND_LABEL: Record<string, string> = { post: "📝 Post", build: "🛠️ Build", experiment: "🧪 Experiment", research: "🔎 Research" };
 const fmtKey = (f: string) => f.toLowerCase().replace(/[^a-z]/g, "");
 const RIFF: Record<string, string> = {
   extend: "You extend their point with your own evidence",
@@ -107,17 +108,24 @@ export function cardBlocks(card: Card): Block[] {
   const fmt = FORMAT[fmtKey(m.format)] ?? m.format;
   const sources = sourceLines(card);
   const notes = notesLine(card);
+  const c = m.content;
+  const kind = m.kind ?? c?.kind ?? "post";
+  const post = kind === "post";
   const blocks: Block[] = [
     { type: "divider" },
     { type: "header", text: { type: "plain_text", text: title.slice(0, 150), emoji: true } },
-    { type: "context", elements: [{ type: "mrkdwn", text: `*${PLATFORM[m.platform] ?? m.platform}*   ·   ${fmt}   ·   predicted ${m.predicted_score}/10` }] },
+    { type: "context", elements: [{ type: "mrkdwn", text: post
+      ? `*${KIND_LABEL.post}*   ·   ${PLATFORM[m.platform] ?? m.platform}   ·   ${fmt}   ·   predicted ${m.predicted_score}/10`
+      : `*${KIND_LABEL[kind] ?? kind}*   ·   ${c?.effort ?? "effort unknown"}   ·   turns into a ${m.platform === "hashnode" ? "Hashnode article" : "LinkedIn post"}   ·   predicted ${m.predicted_score}/10` }] },
   ];
+  if (c?.concept) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*The idea*\n${c.concept}`.slice(0, 2900) } });
   const riff = riffBlock(card);
   if (riff) blocks.push(riff);
-  blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Opening line*\n>${hook.replace(/\n/g, "\n>").slice(0, 2800)}` } });
+  blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${post ? "Opening line" : "The post it turns into"}*\n>${hook.replace(/\n/g, "\n>").slice(0, 2800)}` } });
   if (m.hook_breakdown || template)
     blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Why this hook works*\n${m.hook_breakdown ?? ""}${template ? `${m.hook_breakdown ? "\n" : ""}_Pattern:_ ${template}` : ""}`.slice(0, 2900) } });
-  if (angle) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Your angle*\n${angle}`.slice(0, 2900) } });
+  if (angle) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${post ? "Your angle" : "Why it's worth doing"}*\n${angle}`.slice(0, 2900) } });
+  if (!post && c?.outline?.length) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Plan*\n${c.outline.map((s, i) => `${i + 1}. ${s}`).join("\n")}`.slice(0, 2900) } });
   if (sources.length) blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Also drawing on*\n${sources.join("\n")}`.slice(0, 2900) } });
   if (notes) blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `From your work notes: ${notes}` }] });
   if (m.worth) blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `🧭 *Worth writing ${m.worth.score}/5* · ${m.worth.reason}`.slice(0, 2900) }] });
@@ -125,7 +133,7 @@ export function cardBlocks(card: Card): Block[] {
     type: "actions",
     block_id: `card:${m.id}`.slice(0, 255),
     elements: [
-      { type: "button", style: "primary", text: { type: "plain_text", text: "Approve" }, action_id: "approve_card", value: m.id },
+      { type: "button", style: "primary", text: { type: "plain_text", text: post ? "Approve" : "I'll do it" }, action_id: "approve_card", value: m.id },
       { type: "button", text: { type: "plain_text", text: "Rewrite" }, action_id: "rewrite_card", value: m.id },
       { type: "button", style: "danger", text: { type: "plain_text", text: "Reject" }, action_id: "reject_card", value: m.id },
       ...(url ? [{ type: "button", text: { type: "plain_text", text: "Full card" }, action_id: "open_card", url }] : []),

@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 export const CardDraft = z.object({
+  kind: z.enum(["post", "build", "experiment", "research"]).describe("post = a post about a concept; build = something to build that demonstrates or tests a concept; experiment = a test of a claim, postable either way; research = a question to answer with public data."),
+  concept: z.string().describe("The idea underneath this card in one sentence, general enough that someone outside their company gets it."),
+  effort: z.string().nullable().describe("For build/experiment/research: how long it takes (\"an evening\", \"a weekend\"). Null for posts."),
   riff_on: z.string().nullable().describe("id of the ONE swipe-file post that sparked this idea (from SWIPE FILE), or null only for a pure work-note card. The spark, not the subject: it never appears in the hook."),
   their_point: z.string().nullable().describe("What that post actually argued or showed, in one specific sentence (their numbers, their example). Null if riff_on is null."),
   riff_type: z.string().describe("How the idea relates to the spark: extend (the owner's own experience of the same thing), disagree (their experience says otherwise), apply (they tried it themselves), teardown (dissects the example), react-to-data (their take on the numbers), screenshot-commentary (the one card per batch that may quote the post), or original (work notes only)."),
@@ -10,7 +13,7 @@ export const CardDraft = z.object({
   hook_move: z.string().describe("The move the hook makes, one of: confession, credential-gap, risk, scene, stat-line, before-after, dare, list, question, tool-love, hot-take, how-i, result, reaction."),
   hook_breakdown: z.string().describe("Why the hook works, in 1-2 plain sentences: the move it makes (a number, a confession, a stake, a contrarian turn) and why that stops a GTM engineer mid-scroll."),
   angle: z.string().describe("What makes this post the owner's and not a rehash: the build, the lesson, the opinion."),
-  outline: z.array(z.string()).describe("3-6 beats for the post."),
+  outline: z.array(z.string()).describe("Posts: 3-6 beats. Builds: the build plan. Experiments: the method and what to measure. Research: what to collect and how."),
   format: z.string().describe("One of: story, list, contrarian, teardown, howto, data, casestudy, screenshot-commentary, question, essay."),
   hook_template_used: z.string().nullable().describe("Which HOOK LIBRARY template this adapts, verbatim, or null."),
   brain_refs: z.array(z.string()).describe("ids of work-note items this draws on (from the WORK NOTES list). Empty if none."),
@@ -22,6 +25,9 @@ export type CardDraft = z.infer<typeof CardDraft>;
 
 /** Fixed vocabularies. The model writes free text; code maps it onto these (unknown → "other"). */
 export const FORMATS = ["story", "list", "contrarian", "teardown", "howto", "data", "casestudy", "screenshotcommentary", "question", "essay", "roundup", "interview", "announcement", "other"] as const;
+export const KINDS = ["post", "build", "experiment", "research"] as const;
+export type Kind = (typeof KINDS)[number];
+export const normalizeKind = (s: unknown): Kind => ((KINDS as readonly string[]).includes(String(s)) ? (s as Kind) : "post");
 export const HOOK_MOVES = ["confession", "credentialgap", "risk", "scene", "statline", "beforeafter", "dare", "list", "question", "toollove", "hottake", "howi", "result", "reaction", "other"] as const;
 export const RIFF_TYPES = ["extend", "disagree", "apply", "teardown", "reacttodata", "screenshotcommentary", "original"] as const;
 const key = (s: string) => (s ?? "").toLowerCase().replace(/[^a-z]/g, "");
@@ -65,6 +71,8 @@ export type CardMeta = {
   slack?: { channel: string; ts: string };
   hook_breakdown?: string;
   hook_move?: string;
+  /** post | build | experiment | research (cards from before kinds existed are posts) */
+  kind?: string;
   /** the editor pass: is this worth writing about? (1-5) */
   worth?: { score: number; reason: string; fix: string };
   /** The structured card as generated (normalized). Slack, drafts, and the retro read this, not the markdown. */

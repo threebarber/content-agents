@@ -16,6 +16,10 @@ export const Budget = z.object({
     .prefault({}),
   backfill_days: z.number().int().default(90),
   ideas_per_batch: z.number().int().default(10),
+  /** how a batch splits across card kinds; scaled to the batch size when it doesn't add up */
+  idea_mix: z
+    .object({ post: z.number().int().default(4), build: z.number().int().default(2), experiment: z.number().int().default(2), research: z.number().int().default(2) })
+    .prefault({}),
   ideate_effort: z.enum(["low", "medium", "high", "xhigh", "max"]).default("high"),
   use_batch_api: z.boolean().default(true),
   social: z

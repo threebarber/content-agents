@@ -196,3 +196,21 @@ test("X Articles are read in full via fxtwitter", async () => {
   assert.match(it.text, /6,300%/);
   assert.ok(!/t\.co/.test(it.text), "article body replaces the bare link");
 });
+
+test("batch mix: kinds scale to the batch size, and extras of one kind are sent back as a missing kind", async () => {
+  const { mixFor } = await import("../src/agents/ideate.ts");
+  assert.deepEqual(mixFor(10), { post: 4, build: 2, experiment: 2, research: 2 });
+  assert.deepEqual(mixFor(2), { post: 2, build: 0, experiment: 0, research: 0 });
+  const cards = [0, 1, 2].map((i) => goodCard({ brain_refs: [], riff_on: null, kind: "post", hook_template_used: `t${i}` }));
+  const issues = verifyCards(cards as never, [], 0, { post: 2, build: 1, experiment: 0, research: 0 });
+  assert.ok(!issues.has(0) && !issues.has(1));
+  assert.match(issues.get(2)!.join(), /wants 2 post card\(s\) and has 3; make this one a build card/);
+});
+
+test("a build card shows its kind, effort, the idea, the plan, and an \"I'll do it\" button", async () => {
+  const { cardBlocks } = await import("../src/agents/slack-cards.ts");
+  const content = goodCard({ kind: "build", effort: "a weekend", concept: "Agents need a body to touch the real world.", outline: ["wire it", "film it"] });
+  const card = { file: "/tmp/x.md", body: "# t", meta: { id: "c1", platform: "linkedin", format: "howto", predicted_score: 7, evidence: [], brain_refs: [], kind: "build", content } } as never;
+  const text = JSON.stringify(cardBlocks(card));
+  for (const s of ["🛠️ Build", "a weekend", "The idea", "Agents need a body", "The post it turns into", "Why it's worth doing", "1. wire it", "I'll do it"]) assert.ok(text.includes(s), `missing ${s}`);
+});

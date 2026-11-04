@@ -4,7 +4,7 @@ import YAML from "yaml";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { traceable, getCurrentRunTree } from "langsmith/traceable";
 import { claude, MODELS, prompt, readMemory, tally } from "./llm.js";
-import { IdeateOutput, normalizeFormat, normalizeHookMove, normalizeRiffType, type CardDraft, type CardMeta } from "../../schemas/card.js";
+import { IdeateOutput, KINDS, normalizeFormat, normalizeHookMove, normalizeKind, normalizeRiffType, type CardDraft, type CardMeta, type Kind } from "../../schemas/card.js";
 import { loadHooks } from "./distill.js";
 import { cardBody, cardId, listCards, writeCard, repoUrl, type Card } from "./cards.js";
 import { withDb } from "../lib/duckdb.js";
@@ -187,7 +187,19 @@ async function ideationContext(): Promise<{ hooks: HookRecord[]; notes: BrainRow
   return { hooks: swipeFile(21, 45), notes: await workNotes(30, 20) };
 }
 
-function ideateParams(system: string, r: Rendered, n: number) {
+export type Mix = Record<Kind, number>;
+
+/** The configured kind mix, scaled to `n` cards (posts absorb any rounding). */
+export function mixFor(n: number): Mix {
+  const base = loadBudget().idea_mix as Mix;
+  const total = KINDS.reduce((a, k) => a + base[k], 0) || 1;
+  const out = Object.fromEntries(KINDS.map((k) => [k, k === "post" ? 0 : Math.floor((base[k] * n) / total)])) as Mix;
+  out.post = Math.max(0, n - KINDS.reduce((a, k) => a + out[k], 0));
+  return out;
+}
+const mixText = (m: Mix) => KINDS.filter((k) => m[k]).map((k) => `${m[k]} ${k}`).join(", ");
+
+function ideateParams(system: string, r: Rendered, n: number, mix?: Mix) {
   return {
     model: MODELS.ideate,
     max_tokens: 64000,
@@ -198,7 +210,7 @@ function ideateParams(system: string, r: Rendered, n: number) {
         role: "user" as const,
         content: [
           { type: "text" as const, text: r.stable, cache_control: { type: "ephemeral" as const } },
-          { type: "text" as const, text: `${r.volatile}\n\n=====\n\nWrite ${n} cards.` },
+          { type: "text" as const, text: `${r.volatile}\n\n=====\n\nWrite ${n} cards.${mix ? ` Kinds: ${mixText(mix)}.` : ""}` },
         ],
       },
     ],
@@ -206,9 +218,9 @@ function ideateParams(system: string, r: Rendered, n: number) {
 }
 
 const callModel = traceable(
-  async (input: { system: string; user: Rendered; n: number }) => {
+  async (input: { system: string; user: Rendered; n: number; mix?: Mix }) => {
     // streamed: a 10-card batch plus thinking can exceed what a non-streaming request may ask for
-    const res = await claude().messages.stream(ideateParams(input.system, input.user, input.n)).finalMessage();
+    const res = await claude().messages.stream(ideateParams(input.system, input.user, input.n, input.mix)).finalMessage();
     if (!res.parsed_output) throw new Error(`ideate: no parsed output (stop_reason=${res.stop_reason})`);
     return { cards: res.parsed_output.cards, usd: tally(MODELS.ideate, res.usage), run_id: getCurrentRunTree(true)?.id ?? null };
   },
@@ -229,6 +241,8 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
   d.format = normalizeFormat(d.format);
   d.riff_type = d.riff_on ? normalizeRiffType(d.riff_type) : "original";
   d.hook_move = normalizeHookMove(d.hook_move);
+  d.kind = normalizeKind(d.kind);
+  if (d.kind === "post") d.effort = null;
   d.brain_refs = noteIds.length ? normalizeRefs(d.brain_refs, noteIds) : d.brain_refs;
   d.evidence = d.evidence.filter((e) => known.has(e.item_id));
   return {
@@ -249,6 +263,7 @@ function toMeta(d: CardDraft, hooks: HookRecord[], runId: string | null, seed: s
     published_url: "",
     hook_breakdown: d.hook_breakdown,
     hook_move: d.hook_move,
+    kind: d.kind,
     ...(worthOf.has(d) ? { worth: worthOf.get(d) } : {}),
     riff_on: d.riff_on,
     riff_type: d.riff_type,
@@ -273,7 +288,7 @@ function namesIn(author: string | null | undefined): string[] {
 }
 
 /** Verification loop: deterministic checks on a batch. Returns issues per card index (empty = pass). */
-export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: number): Map<number, string[]> {
+export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: number, mix?: Mix): Map<number, string[]> {
   const ids = new Set(hooks.map((h) => h.item_id));
   const authorOf = new Map(hooks.map((h) => [h.item_id, h.author]));
   let reactions = 0;
@@ -313,6 +328,17 @@ export function verifyCards(cards: CardDraft[], hooks: HookRecord[], minRiffs: n
     for (const key of new Set((c.brain_refs ?? []).map(projectKey))) perProject.set(key, [...(perProject.get(key) ?? []), i]);
   });
   for (const [key, idx] of perProject) if (idx.length > 2) for (const i of idx.slice(2)) add(i, `third card leaning on the same work project (${key}); use a different project or none`);
+  if (mix) {
+    // the batch must match the requested kinds: extras of one kind are sent back as a kind that's short
+    const have = Object.fromEntries(KINDS.map((k) => [k, 0])) as Mix;
+    cards.forEach((c) => have[normalizeKind(c.kind)]++);
+    const short = KINDS.filter((k) => have[k] < mix[k]);
+    const seen = Object.fromEntries(KINDS.map((k) => [k, 0])) as Mix;
+    cards.forEach((c, i) => {
+      const k = normalizeKind(c.kind);
+      if (++seen[k] > mix[k] && short.length) add(i, `the batch wants ${mix[k]} ${k} card(s) and has ${have[k]}; make this one a ${short.join(" or ")} card`);
+    });
+  }
   const riffs = cards.filter((c) => c.riff_on && ids.has(c.riff_on)).length;
   if (riffs < minRiffs) cards.forEach((c, i) => { if (!c.riff_on) add(i, `batch needs ≥${minRiffs} cards riffing on a swipe-file post (has ${riffs}); set riff_on to the post that sparked this one`); });
   return issues;
@@ -335,11 +361,11 @@ export function normalizeRefs(refs: string[], known: string[]): string[] {
 
 /** Generate, check, and repair once: flagged cards are sent back with the reasons and replaced. */
 type FirstPass = { cards: CardDraft[]; usd: number; run_id: string | null };
-async function generateChecked(user: Rendered, n: number, hooks: HookRecord[], firstPass?: FirstPass): Promise<{ cards: CardDraft[]; usd: number; run_id: string | null; repaired: number }> {
-  const first = firstPass ?? (await callModel({ system: prompt("ideate"), user, n }));
+async function generateChecked(user: Rendered, n: number, hooks: HookRecord[], firstPass?: FirstPass, mix?: Mix): Promise<{ cards: CardDraft[]; usd: number; run_id: string | null; repaired: number }> {
+  const first = firstPass ?? (await callModel({ system: prompt("ideate"), user, n, mix }));
   let cards = first.cards;
   let usd = first.usd;
-  const issues = verifyCards(cards, hooks, Math.ceil(n / 2));
+  const issues = verifyCards(cards, hooks, Math.ceil(n / 2), mix);
   // editor pass: deterministic checks catch the shape, this catches ideas that aren't worth writing
   const judged = await judgeCards(cards).catch((e) => (console.error(`judge failed: ${(e as Error).message}`), { worth: new Map<number, Worth>(), usd: 0 }));
   usd += judged.usd;
@@ -371,12 +397,13 @@ async function generateChecked(user: Rendered, n: number, hooks: HookRecord[], f
 export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean; batch?: { sleep: (ms: number) => Promise<void>; deadlineMs: number } } = {}): Promise<IdeateResult> {
   const { hooks, notes } = await ideationContext();
   const n = opts.n ?? loadBudget().ideas_per_batch;
+  const mix = mixFor(n);
   const rendered = render(hooks, notes, "");
-  const viaBatch = opts.batch ? await batchFirstPass(rendered, n, opts.batch).catch((e) => (console.error(`batch failed, using a normal request: ${(e as Error).message}`), null)) : null;
-  const { cards, usd, run_id, repaired } = await generateChecked(rendered, n, hooks, viaBatch ?? undefined);
+  const viaBatch = opts.batch ? await batchFirstPass(rendered, n, mix, opts.batch).catch((e) => (console.error(`batch failed, using a normal request: ${(e as Error).message}`), null)) : null;
+  const { cards, usd, run_id, repaired } = await generateChecked(rendered, n, hooks, viaBatch ?? undefined, mix);
   if (repaired) console.error(`ideate: repaired ${repaired} card(s) that failed review`);
   if (opts.dry) {
-    for (const c of cards) console.log(`\n[${c.platform}/${c.format}] ${c.title}\n  ${c.hook}`);
+    for (const c of cards) console.log(`\n[${c.kind}/${c.platform}/${c.format}] ${c.title}\n  ${c.concept}\n  ${c.hook}`);
     return { files: [], usd, runId: run_id };
   }
   const files = cards.map((c) => writeCard("inbox", toMeta(c, hooks, run_id, null, notes.map((n) => n.id)), cardBody(c)));
@@ -387,7 +414,7 @@ export async function ideate(opts: { n?: number; post?: boolean; dry?: boolean; 
 /** Rewrite one card immediately using the owner's note. */
 export async function ideateOne(prev: Card): Promise<IdeateResult> {
   const { hooks, notes } = await ideationContext();
-  const extra = `REWRITE REQUEST\nThe owner marked this card "rewrite" — good idea, wrong angle. Their note: "${prev.meta.why || "(no note)"}".\nOriginal card:\n${prev.body}\n\nWrite one replacement card that keeps what was good and follows their note.`;
+  const extra = `REWRITE REQUEST\nThe owner marked this card "rewrite" — good idea, wrong angle. Their note: "${prev.meta.why || "(no note)"}".\nOriginal card:\n${prev.body}\n\nWrite one replacement card that keeps what was good and follows their note. Keep the same kind (${prev.meta.kind ?? "post"}) unless the note asks for a different one.`;
   const { cards, usd, run_id } = await callModel({ system: prompt("ideate"), user: render(hooks, notes, extra), n: 1 });
   const c = cards[0];
   const file = writeCard("inbox", toMeta(c, hooks, run_id, `rewrite:${prev.meta.id}`, notes.map((n) => n.id)), cardBody(c));
@@ -414,7 +441,7 @@ export async function ideateFromSaved(items: SavedItem[], note: string, thread?:
   const per = items.length > 1 ? 1 : 2;
   const n = Math.min(4, per * items.length);
   const saved = items.map((i) => `[${i.id}] ${i.author ?? "?"} — "${i.title ?? ""}" (❤️${i.metrics.likes ?? "?"} 💬${i.metrics.comments ?? "?"})\n${i.text.slice(0, 6000)}`).join("\n\n---\n\n");
-  const extra = `SAVED POST(S): THE SUBJECT OF THIS BATCH\nThe owner dropped ${items.length > 1 ? "these posts" : "this post"} into Slack${note ? ` with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${n} card(s) sparked by a saved post above: set riff_on to its id (${items.map((i) => i.id).join(", ")}), and their_point to what that post specifically argued. The saved post sets the subject; the card is the owner's own post about that subject, from their experience, builds, and opinions (THEIR VOICE, WORK NOTES). The hook stands on its own and doesn't name the author or cite the post; at most one card may be a direct reaction that quotes it. Don't map the post onto one of their tools ("they did X, my tool does X"). Do not bring in other people's posts. Use a different riff_type and hook move for each card.`;
+  const extra = `SAVED POST(S): THE SUBJECT OF THIS BATCH\nThe owner dropped ${items.length > 1 ? "these posts" : "this post"} into Slack${note ? ` with this note: "${note}"` : ""}.\n\n${saved}\n\nWrite ${n} card(s) sparked by a saved post above: set riff_on to its id (${items.map((i) => i.id).join(", ")}), and their_point to what that post specifically argued. The saved post sets the subject; the card is the owner's own post about that subject, from their experience, builds, and opinions (THEIR VOICE, WORK NOTES). The hook stands on its own and doesn't name the author or cite the post; at most one card may be a direct reaction that quotes it. Don't map the post onto one of their tools ("they did X, my tool does X"). Do not bring in other people's posts. Use a different riff_type and hook move for each card. Pick each card's kind: a post, or a build, experiment, or research card when the saved post makes a claim worth testing or suggests something worth building.`;
   const { cards, usd, run_id } = await generateChecked(render([...savedHooks, ...background], notes, extra), n, savedHooks);
   const files = cards.map((c, k) => {
     // enforce the subject: a card that wandered to another post is pointed back at the saved one
@@ -474,8 +501,8 @@ export async function ideationInputs(): Promise<{ swipe: number; swipeWithExcerp
  * the batch is cancelled and the caller falls back to a normal request.
  */
 const batchFirstPass = traceable(
-  async (r: Rendered, n: number, opts: { sleep: (ms: number) => Promise<void>; deadlineMs: number }): Promise<FirstPass | null> => {
-    const params = ideateParams(prompt("ideate"), r, n);
+  async (r: Rendered, n: number, mix: Mix, opts: { sleep: (ms: number) => Promise<void>; deadlineMs: number }): Promise<FirstPass | null> => {
+    const params = ideateParams(prompt("ideate"), r, n, mix);
     const { format, ...cfg } = params.output_config;
     const batch = await claude().messages.batches.create({
       requests: [{ custom_id: "ideate", params: { ...params, output_config: { ...cfg, format: { type: "json_schema", schema: (format as { schema: Record<string, unknown> }).schema } } } as never }],
